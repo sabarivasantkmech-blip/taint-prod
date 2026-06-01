@@ -1,0 +1,100 @@
+name: Deploy Production Pages
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: production-pages
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate production static bundle
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: JavaScript syntax check
+        run: |
+          node --check assets/js/app.js
+          node --check assets/js/supabase-runtime-config.js
+
+      - name: Assert production config
+        shell: bash
+        run: |
+          grep -q '"environment": "prod"' supabase-config.js
+          grep -q 'https://oavkdvuvlupawxhjtowh.supabase.co' supabase-config.js
+
+      - name: Prepare Pages artifact
+        shell: bash
+        run: |
+          rm -rf _site
+          mkdir -p _site
+          cp index.html supabase-config.js _site/
+          if [ -f CNAME ]; then cp CNAME _site/; fi
+          cp -R assets vendor _site/
+          touch _site/.nojekyll
+          test ! -e _site/taint_supabase_schema.sql
+          test ! -e _site/README.md
+
+      - name: Upload production candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-site-candidate
+          path: _site
+          if-no-files-found: error
+
+  production-approval:
+    name: Production release approval
+    needs: validate
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://sabarivasantkmech-blip.github.io/taint-prod/
+    steps:
+      - name: Approval recorded
+        run: |
+          echo "Production deployment approved for $GITHUB_SHA"
+
+  deploy:
+    name: Deploy GitHub Pages
+    needs: production-approval
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Download approved production candidate
+        uses: actions/download-artifact@v4
+        with:
+          name: production-site-candidate
+          path: _site
+
+      - name: Upload static site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

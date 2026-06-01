@@ -1,0 +1,1886 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<!--
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  TAINT — Carbon Emissions Calculator                                        ║
+║  "Taint the Great Job Carefully!"                                           ║
+╠══════════════════════════════════════════════════════════════════════════════╣
+║  HOW TO HOST (free, no server required)                                     ║
+║                                                                             ║
+║  OPTION 1 — GitHub Pages                                                    ║
+║    1. Create repo on github.com                                             ║
+║    2. Upload file as index.html                                             ║
+║    3. Settings → Pages → Deploy from branch → main / root                  ║
+║    4. Live at: https://yourusername.github.io/repo-name                     ║
+║                                                                             ║
+║  OPTION 2 — Netlify Drop (30 seconds)                                       ║
+║    1. Go to https://app.netlify.com/drop                                    ║
+║    2. Drag & drop this file — instant live URL                              ║
+║                                                                             ║
+║  OPTION 3 — Vercel CLI                                                      ║
+║    npm i -g vercel && vercel --yes (in folder with index.html)              ║
+║                                                                             ║
+║  GLOBAL STATS — Supabase (free Firebase alternative)                         ║
+║    1. supabase.com → New project → SQL Editor → run setup SQL               ║
+║    2. Enable Realtime Database (test mode)                                  ║
+║    3. Replace SUPABASE_CONFIG below with your project URL + anon key        ║
+║    4. Set DB rules: stats path → .read/.write true, all else false         ║
+║                                                                             ║
+║  LIVE FUEL PRICES                                                           ║
+║    Scraped daily from goodreturns.in via CORS proxy.                        ║
+║    No API key. Falls back: cache → DEFAULT_PRICES if fetch fails.           ║
+║                                                                             ║
+║  AQI — replace WAQI_TOKEN='demo' with free token from aqicn.org/api/       ║
+║  FEEDBACK — replace FEEDBACK_EMAIL with your email (FormSubmit.co)         ║
+║  CONTACT: taint.calculator@gmail.com                                        ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+-->
+<meta charset="UTF-8"/>
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://api.anthropic.com https://nominatim.openstreetmap.org https://router.project-osrm.org https://api.waqi.info https://api.open-meteo.com https://*.supabase.co https://formsubmit.co https://server.arcgisonline.com; form-action 'self' https://formsubmit.co; frame-src 'none'; worker-src 'none'; object-src 'none'; base-uri 'self';">
+
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>TAINT — Carbon Emissions Calculator</title>
+<meta name="description" content="TAINT: Taint the Great Job Carefully! Calculate CO₂ emissions for Indian city commutes, homes, workplaces, and purchases."/>
+<meta name="theme-color" content="#090b0d" id="themeMeta"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link rel="stylesheet" href="./vendor/leaflet/1.9.4/leaflet.min.css"/>
+<script src="./vendor/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="./assets/js/leaflet-popup-sanitize.js?v=20260527" defer></script>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700&family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet"/>
+<!-- Supabase used for global stats (no SDK needed — plain fetch) -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.106.1/dist/umd/supabase.min.js" integrity="sha384-dzQgxMPp/h+N0t5qDf6Bp516wKZr3pXgGMpA7/ZM6tiWkqYo90N060L03dxnZ8Tf" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
+
+<link rel="stylesheet" href="./assets/css/app.css?v=20260601-prod-branding"/>
+
+</head>
+<body>
+<div class="loading-overlay" id="loadingOverlay" aria-hidden="true">
+  <div class="loading-ring" aria-hidden="true"></div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     TOPBAR — sticky full-width, OUTSIDE .wrap
+     Contains: TAINT logo · live clock · temperature
+               AQI · language/country · theme toggle
+     ═══════════════════════════════════════════════ -->
+<nav class="topbar" role="banner">
+  <div class="topbar-inner">
+
+    <!-- Brand -->
+    <a class="logo" href="#" aria-label="TAINT home">
+      <img class="logo-mark" src="./assets/logo1.png" alt="">
+      <span class="logo-text"><span class="logo-name">TAINT</span><span class="logo-city" id="logoCity">Chennai</span></span>
+    </a>
+
+    <!-- Live clock -->
+    <div class="clock-pill" id="clockPill">
+      <span class="clock-dot"></span>
+      <strong id="cTime">--:--:--</strong>
+      <span id="cDay">---</span>
+      <span id="cDate">-- --- ----</span>
+    </div>
+
+    <!-- Live temperature (Open-Meteo, no key) -->
+    <div class="temp-chip" id="tempChip" title="Current temperature">
+      <span>🌡️</span>
+      <span class="tv" id="tempVal">—</span>
+      <span id="tempUnit">°C</span>
+      <span style="font-size:10px;opacity:.7" id="tempDesc"></span>
+    </div>
+
+    <!-- Air quality index -->
+    <div class="aqi-chip" id="aqiChip" title="Air Quality Index">
+      <span id="aqiEmoji">🌫️</span>
+      <span>AQI</span>
+      <span class="av" id="aqiVal">—</span>
+      <span style="font-size:10px;opacity:.7" id="aqiLbl"></span>
+    </div>
+
+    <!-- Language & country -->
+    <div class="lang-chip" title="Website language and target region">
+      <span>🇮🇳</span>
+      <span>Tamil · English</span>
+      <span style="opacity:.5;font-size:10px">· India</span>
+    </div>
+
+    <!-- Dark / light theme toggle -->
+    <button class="theme-btn" id="themeBtn">🌙 Dark</button>
+    <div class="account-controls">
+      <button class="user-avatar-btn" id="userAvatarBtn" title="Sign in / Account" aria-label="User account">
+        <span id="userAvatarInitial">GU</span>
+      </button>
+      <button class="account-menu-btn" id="accountMenuBtn" type="button" aria-label="Account menu" aria-expanded="false" aria-controls="accountMenu">
+        <span></span><span></span><span></span>
+      </button>
+      <div class="account-menu" id="accountMenu" role="menu" aria-label="Account details">
+        <div class="account-menu-title" id="accountMenuName">Guest</div>
+        <div class="account-menu-email" id="accountMenuEmail">Not signed in</div>
+        <div class="account-menu-meta" id="accountMenuProvider">Local browser</div>
+        <button class="account-menu-action" id="accountDetailsBtn" type="button">Account details</button>
+        <button class="account-menu-action danger" id="accountLogoutBtn" type="button">Logout</button>
+      </div>
+    </div>
+
+  </div>
+</nav>
+
+<!-- ═══════════════════════════════════════════════
+     PAGE WRAPPER — max-width centred column
+     ═══════════════════════════════════════════════ -->
+<main class="wrap">
+
+  <!-- ── LEFT SIDEBAR (desktop) ── -->
+  <aside class="app-sidebar" id="appSidebar">
+    <div class="sb-label">City</div>
+    <div class="sb-cities" id="sbCities"></div>
+    <div class="sb-label" style="margin-top:16px">Mode</div>
+    <nav class="sb-modes" id="sbModes"></nav>
+    <div class="sb-weather" id="sbWeather"></div>
+    <div class="sb-mini-stats" id="sbMiniStats"></div>
+    <!-- User state at bottom of sidebar -->
+    <div class="sb-user" id="sbUser">
+      <div class="sb-user-row" id="sbUserRow">
+        <div class="sb-avatar" id="sbAvatar">GU</div>
+        <div class="sb-user-info">
+          <div class="sb-user-name" id="sbUserName">Guest</div>
+          <button class="sb-user-action" id="sbUserAction">Sign In</button>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ── MOBILE TOP NAV ── -->
+  <div class="mobile-nav">
+    <!-- ── HEADER ── -->
+  <div class="header">
+    <div class="badge-row">
+      <span class="badge">🌿 India · Multi-city</span>
+      <span class="aqi-badge" id="aqiBadge">🌫️ AQI checking…</span>
+      <span class="aqi-badge" id="tempBadge">🌡️ fetching temp…</span>
+    </div>
+    <h1>Carbon Emissions Calculator</h1>
+    <p class="slogan">Taint the Great Job Carefully!</p>
+    <p class="header-sub">Scientific methodology from CEA, ICCT, IPCC &amp; MoRTH. Live fuel prices · OSM routing · Real-time AQI &amp; weather.</p>
+  </div>
+
+  <!-- ── GLOBAL STATS ── -->
+  <div class="stats-bar" hidden aria-hidden="true">
+    <div class="stat-pill hl">
+      <div class="sp-lbl"><span class="dot"></span>Unique visitors</div>
+      <div class="sp-val" id="statUsers">—</div>
+      <div class="sp-sub" id="statUsersLbl">connecting…</div>
+    </div>
+    <div class="stat-pill">
+      <div class="sp-lbl">Total calculations</div>
+      <div class="sp-val" id="statCalcs">—</div>
+      <div class="sp-sub" id="statCalcsLbl">all time</div>
+    </div>
+    <div class="stat-pill">
+      <div class="sp-lbl">This month (device)</div>
+      <div class="sp-val" id="statMonth">0</div>
+      <div class="sp-sub">on this device</div>
+    </div>
+  </div>
+
+  <!-- ── CITY PICKER ── -->
+  <div class="city-picker-wrap">
+    <div class="city-picker" id="cityPicker">
+      <button class="city-pill active" data-city="chennai"><span class="cp-code">MAS</span><span class="cp-name">Chennai</span></button>
+      <button class="city-pill" data-city="mumbai"><span class="cp-code">BOM</span><span class="cp-name">Mumbai</span></button>
+      <button class="city-pill" data-city="delhi"><span class="cp-code">DEL</span><span class="cp-name">Delhi NCR</span></button>
+      <button class="city-pill" data-city="bangalore"><span class="cp-code">BLR</span><span class="cp-name">Bengaluru</span></button>
+      <button class="city-pill" data-city="hyderabad"><span class="cp-code">HYD</span><span class="cp-name">Hyderabad</span></button>
+      <button class="city-pill" data-city="kolkata"><span class="cp-code">CCU</span><span class="cp-name">Kolkata</span></button>
+      <button class="city-pill" data-city="pune"><span class="cp-code">PNQ</span><span class="cp-name">Pune</span></button>
+      <button class="city-pill" data-city="ahmedabad"><span class="cp-code">AMD</span><span class="cp-name">Ahmedabad</span></button>
+      <button class="city-pill" data-city="kochi"><span class="cp-code">COK</span><span class="cp-name">Kochi</span></button>
+      <button class="city-pill" data-city="jaipur"><span class="cp-code">JAI</span><span class="cp-name">Jaipur</span></button>
+    </div>
+  </div>
+
+  <!-- ── MODE TOGGLE ── -->
+  <div class="mode-toggle">
+    <button class="mode-tab active" id="modeCommute"   data-mode="commute">🧍 My Commute</button>
+    <button class="mode-tab"        id="modeWorkplace" data-mode="workplace">🏢 My Workplace</button>
+    <button class="mode-tab"        id="modeHome"      data-mode="home">🏠 My Home</button>
+    <button class="mode-tab"        id="modeTaint"     data-mode="taint">🌿 My Taint</button>
+    <button class="mode-tab"        id="modeBuy"       data-mode="buy">🛒 Taint Buy</button>
+    <button class="mode-tab"        id="modeAdmin"     data-mode="admin" data-admin-only="true" hidden>Taint Admin</button>
+  </div>
+
+  </div><!-- /mobile-nav -->
+
+  <!-- ── MAIN CONTENT ── -->
+  <div class="app-content">
+
+  <!-- ════════════════════════════════════════════
+       COMMUTE MODE (existing content)
+       ════════════════════════════════════════════ -->
+  <div id="commuteSection">
+  <div class="card">
+    <div class="card-title">📍 Route — From / To</div>
+
+    <!-- Text search inputs -->
+    <div class="route-grid">
+      <div class="rg-fg">
+        <label for="fromLoc">From <button class="geo-btn" id="geoFromBtn" title="Use my current location">📍 My Location</button></label>
+        <div class="ri-wrap">
+          <span class="ri-dot from-dot"></span>
+          <input class="route-input" id="fromLoc" type="text" placeholder="e.g. T. Nagar, Chennai" autocomplete="off"/>
+          <button class="ri-clear" id="fromClear">✕</button>
+        </div>
+        <div class="ac-list" id="fromAc"></div>
+      </div>
+      <div class="rg-fg">
+        <label for="toLoc">To</label>
+        <div class="ri-wrap">
+          <span class="ri-dot to-dot"></span>
+          <input class="route-input" id="toLoc" type="text" placeholder="e.g. Anna Nagar, Chennai" autocomplete="off"/>
+          <button class="ri-clear" id="toClear">✕</button>
+        </div>
+        <div class="ac-list" id="toAc"></div>
+      </div>
+    </div>
+    <div class="swap-row">
+      <button class="swap-btn" id="swapBtn" title="Swap locations">⇅ Swap</button>
+      <button class="live-track-btn" id="ltToggleBtn">🚦 Track Live Journey</button>
+      <span class="route-map-hint" id="routeMapHint">🖱️ Or click the map to pin From / To</span>
+    </div>
+
+    <!-- Live Journey Tracker (expands below swap row) -->
+    <div class="lt-card" id="ltCard">
+      <!-- Status bar -->
+      <div class="lt-status-bar">
+        <span class="lt-status-dot" id="ltDot"></span>
+        <span class="lt-status-txt" id="ltStatusTxt">Ready to track</span>
+        <button class="lt-stop-btn" id="ltStopBtn">■ Stop</button>
+      </div>
+
+      <!-- Speed + vehicle prediction -->
+      <div class="lt-main">
+        <!-- Speed gauge -->
+        <div class="lt-gauge">
+          <svg viewBox="0 0 120 70" class="lt-gauge-svg">
+            <path d="M10,65 A55,55 0 0,1 110,65" fill="none" stroke="var(--bd2)" stroke-width="8" stroke-linecap="round"/>
+            <path d="M10,65 A55,55 0 0,1 110,65" fill="none" stroke="var(--green)" stroke-width="8" stroke-linecap="round"
+              stroke-dasharray="172.8" stroke-dashoffset="172.8" id="ltGaugeArc" style="transition:stroke-dashoffset .5s,stroke .5s"/>
+          </svg>
+          <div class="lt-speed-overlay">
+            <span class="lt-speed-val" id="ltSpeedVal">0</span>
+            <span class="lt-speed-unit">km/h</span>
+          </div>
+        </div>
+
+        <!-- Prediction panel -->
+        <div class="lt-pred-panel">
+          <div class="lt-pred-badge" id="ltPredBadge">
+            <span class="lt-pred-icon" id="ltPredIcon">🔍</span>
+            <span class="lt-pred-lbl"  id="ltPredLbl">Detecting…</span>
+          </div>
+          <div class="lt-confidence" id="ltConfidence">
+            <span class="lt-conf-bar" id="ltConf1"></span>
+            <span class="lt-conf-bar" id="ltConf2"></span>
+            <span class="lt-conf-bar" id="ltConf3"></span>
+            <span class="lt-conf-txt" id="ltConfTxt">—</span>
+          </div>
+          <div class="lt-stats-grid">
+            <div class="lt-stat"><span class="lt-stat-v" id="ltDistVal">0.00</span><span class="lt-stat-l">km</span></div>
+            <div class="lt-stat"><span class="lt-stat-v" id="ltCO2Val">0.0</span><span class="lt-stat-l">g CO₂</span></div>
+            <div class="lt-stat"><span class="lt-stat-v" id="ltTimeVal">0:00</span><span class="lt-stat-l">elapsed</span></div>
+            <div class="lt-stat"><span class="lt-stat-v" id="ltAvgSpeedVal">—</span><span class="lt-stat-l">avg km/h</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Speed history mini sparkline -->
+      <div class="lt-spark-wrap">
+        <span class="lt-spark-lbl">Speed history</span>
+        <svg id="ltSparkline" class="lt-sparkline" viewBox="0 0 300 40" preserveAspectRatio="none">
+          <polyline id="ltSparkPoly" points="" fill="none" stroke="var(--green)" stroke-width="1.5" stroke-linejoin="round"/>
+        </svg>
+      </div>
+
+      <!-- Journey summary (shown after stop) -->
+      <div class="lt-summary" id="ltSummary">
+        <div class="lt-sum-title">Journey Summary</div>
+        <div class="lt-sum-grid" id="ltSumGrid"></div>
+        <button class="lt-use-btn" id="ltUseBtn">✓ Use this journey for CO₂ calculation</button>
+      </div>
+    </div>
+
+    <!-- Route map -->
+    <div id="routeMapWrap">
+      <div id="routeMap"></div>
+    </div>
+
+    <!-- Route results strip -->
+    <div class="route-result" id="routeResult">
+      <span class="spin" id="routeSpin"></span>
+      <div class="rr-mode-row" id="rrModeRow">
+        <div class="rr-mode-chip active" id="chipDrive">🚗 <span id="rrTimeDrive">—</span></div>
+        <div class="rr-mode-chip" id="chipBus">🚌 <span id="rrTimeBus">—</span></div>
+        <div class="rr-mode-chip" id="chipCycle">🚲 <span id="rrTimeCycle">—</span></div>
+        <div class="rr-mode-chip" id="chipWalk">🚶 <span id="rrTimeWalk">—</span></div>
+        <div class="rr-mode-chip" id="chipTransit">🚆 <span id="rrTimeTransit">—</span></div>
+      </div>
+      <!-- effective distance — stays in sync with Step 3 input -->
+      <div class="rr-effective" id="rrEffectiveRow">
+        <span class="rr-eff-label">Effective distance for selected mode</span>
+        <span class="rr-eff-val" id="rrEffective">—</span>
+      </div>
+      <!-- factor breakdown -->
+      <div class="rr-factor-row" id="rrFactorRow"></div>
+      <div class="rr-stats">
+        <div class="rr-item">🛣️ <span class="rr-val" id="rrDist">—</span> km road</div>
+        <span class="rr-sep">·</span>
+        <div class="rr-item">📏 <span class="rr-val" id="rrLine">—</span> km straight</div>
+        <span class="rr-note" id="rrModeNote">OpenStreetMap · OSRM · auto-fills distance below</span>
+      </div>
+    </div>
+    <div class="route-err" id="routeErr">Could not find one or both locations. Try adding "Chennai".</div>
+  </div>
+
+  <!-- ── CALCULATOR INPUT ── -->
+  <div class="card">
+    <div class="card-title">Vehicle &amp; journey details</div>
+
+    <!-- Step 1: Category -->
+    <div class="card-title" style="margin-bottom:.5rem">Step 1 — Category</div>
+    <div class="cat-toggle" id="catToggle">
+      <button class="cat-btn active" data-cat="two"><span class="ci">🛵</span>Two-wheeler</button>
+      <button class="cat-btn" data-cat="four"><span class="ci">🚗</span>Four-wheeler</button>
+      <button class="cat-btn" data-cat="shared"><span class="ci">🚌</span>Shared / Public</button>
+      <button class="cat-btn" data-cat="transit"><span class="ci">🚆</span>Train / Metro</button>
+    </div>
+
+    <!-- Step 2: Fuel type -->
+    <div class="card-title" style="margin-bottom:.5rem">Step 2 — Fuel type</div>
+    <div class="fuel-pills" id="fuelPills"></div>
+
+    <!-- Hybrid sub-type panel (shown only for hybrid) -->
+    <div class="hybrid-panel" id="hybridPanel" style="display:none">
+      <div class="hp-lbl">Hybrid technology</div>
+      <button class="hp-btn active" data-htype="mild">Mild Hybrid (MHEV)</button>
+      <button class="hp-btn" data-htype="strong">Strong Hybrid (HEV)</button>
+      <button class="hp-btn" data-htype="phev">Plug-in Hybrid (PHEV)</button>
+    </div>
+
+    <!-- Step 3: Vehicle + journey params -->
+    <div class="card-title" style="margin-bottom:.5rem">Step 3 — Vehicle &amp; journey</div>
+    <div class="form-grid">
+      <div class="fg full">
+        <label for="vehicle">Vehicle type</label>
+        <select id="vehicle"></select>
+        <div class="no-veh" id="noVeh">No vehicles for this combination.</div>
+      </div>
+      <div class="fg">
+        <label for="distance">Distance (km)
+          <span class="dist-link-badge" id="distLinkBadge">🔗 linked to route</span>
+          <button class="dist-reset-btn" id="distResetBtn" style="display:none">↩ reset</button>
+        </label>
+        <input type="number" id="distance" min="0.1" step="0.1" value="10" placeholder="e.g. 15"/>
+      </div>
+      <div class="fg">
+        <label for="passengers">Passengers</label>
+        <input type="number" id="passengers" min="1" step="1" value="1" placeholder="e.g. 2"/>
+      </div>
+      <div class="fg">
+        <label for="pucStatus">PUC certificate status</label>
+        <select id="pucStatus">
+          <option value="valid_clean" selected>Valid · clean result</option>
+          <option value="valid_average">Valid · average result</option>
+          <option value="near_limit">Valid · near limit</option>
+          <option value="expired">Expired / not available</option>
+          <option value="failed">Failed / above limit</option>
+          <option value="unknown">Unknown</option>
+        </select>
+      </div>
+      <div class="fg" id="pucCoField">
+        <label for="pucCo">PUC CO value (%)</label>
+        <input type="number" id="pucCo" min="0" max="10" step="0.01" placeholder="e.g. 0.32"/>
+      </div>
+      <div class="fg" id="pucSmokeField" style="display:none">
+        <label for="pucSmoke">Diesel smoke opacity (%)</label>
+        <input type="number" id="pucSmoke" min="0" max="100" step="0.1" placeholder="e.g. 42"/>
+      </div>
+      <div class="fg full">
+        <div class="puc-note" id="pucNote">PUC data applies a maintenance correction to tailpipe vehicles. Electric and rail modes use city grid intensity instead.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── EMISSIONS OUTPUT ── -->
+  <button class="wp-calc-btn compact-calc" id="commuteCalcBtn" style="margin-bottom:8px">Save Commute Result</button>
+
+  <div class="card">
+    <div class="card-title">Emissions output</div>
+    <div class="fuel-badge petrol" id="fuelBadge">⛽ Petrol</div>
+    <div class="results-grid">
+      <div class="rc primary">
+        <div class="rc-lbl">Per passenger CO₂</div>
+        <div class="rc-val" id="perPax">0.000</div>
+        <div class="rc-unit">kg CO₂ per person</div>
+      </div>
+      <div class="rc">
+        <div class="rc-lbl">Total vehicle CO₂</div>
+        <div class="rc-val" id="totalCo2">0.000</div>
+        <div class="rc-unit">kg CO₂</div>
+      </div>
+      <div class="rc">
+        <div class="rc-lbl">Trees to offset</div>
+        <div class="rc-val" id="trees">0.000</div>
+        <div class="rc-unit">trees × 1 year</div>
+      </div>
+    </div>
+    <!-- Comparison vs petrol (hidden for petrol) -->
+    <div class="cmp-row" id="cmpRow"></div>
+    <!-- Emission intensity bar -->
+    <div class="rating-wrap">
+      <div class="rating-lbl"><span>Emission intensity</span><span id="ratingTxt">—</span></div>
+      <div class="rating-bg"><div class="rating-fill" id="ratingBar" style="width:0%"></div></div>
+    </div>
+    <!-- Personalised tip -->
+    <div class="tip">💡 <span id="tipText">Select a vehicle above to see your personalised insight.</span></div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════
+       CITY VISION — Satellite + Smog Proxy
+       LEFT  : Real Chennai satellite imagery via ESRI
+               World Imagery (free · no key · instant)
+       RIGHT : synced satellite view with an aerosol haze proxy
+               scaled by calculated CO₂, fuel, and PUC status
+       ══════════════════════════════════════════════════ -->
+  <div class="card recent-card" id="commuteHistoryCard">
+    <div class="card-title">Recent Commute Calculations <span class="recent-meta" id="commuteRecentMeta">latest 5</span></div>
+    <div class="recent-layout">
+      <div class="recent-list" id="commuteRecentList"><div class="recent-empty">Sign in or calculate to see recent commute results.</div></div>
+      <div class="trend-chart" id="commuteTrendChart" aria-label="Commute trend chart"></div>
+    </div>
+  </div>
+
+  <div class="card" id="cityVisionCard">
+    <div class="card-title">City vision — Satellite vs Smog Proxy</div>
+    <p class="vision-intro">
+      <strong>Left</strong>: Real <span id="visionCityName">Chennai</span> satellite imagery (ESRI World Imagery).
+      <strong>Right</strong>: a scientifically bounded haze proxy based on commute CO₂, fuel type,
+      tailpipe status, and local-pollutant co-emission risk. It is a visual model, not measured AQI.
+    </p>
+
+    <!-- Emission intensity meter -->
+    <div class="vi-meter">
+      <div class="vi-meter-labels">
+        <span>Emission intensity of your journey</span>
+        <span class="vi-badge" id="viIntensityText">Calculate above to see impact ↑</span>
+      </div>
+      <div class="vi-bar-bg">
+        <div class="vi-bar-fill" id="viBarFill" style="width:0%"></div>
+      </div>
+      <div class="vi-scale">
+        <span>Zero</span><span>Low</span><span>Moderate</span><span>High</span><span>Critical</span>
+      </div>
+      <div style="font-size:11px;color:var(--hi);margin-top:4px" id="viDetail"></div>
+    </div>
+
+    <!-- Generate CTA — reveals after first calculation -->
+    <div id="genCta" style="display:none">
+      <button class="gen-btn" id="genBtn">
+        <span id="genBtnIcon">↻</span>
+        <span id="genBtnText">Apply Smog Proxy</span>
+      </button>
+      <div style="font-size:11px;color:var(--hi);text-align:center;margin-top:5px">
+        Real satellite imagery · aerosol-style haze proxy · no generative image service
+      </div>
+    </div>
+
+    <!-- Image comparison -->
+    <div class="vision-grid" id="visionGrid" style="display:none">
+
+      <!-- LEFT: Real ESRI satellite tiles stitched on canvas (3×3 grid, CORS-enabled) -->
+      <div class="vision-panel">
+        <div class="vision-label-row">
+          <span class="vision-label">Real satellite — Chennai</span>
+          <span class="vs-pill green">ESRI World Imagery</span>
+        </div>
+        <div class="img-frame" id="frameClean" style="min-height:320px">
+          <div id="mapSat" style="width:100%;height:100%;border-radius:var(--rs);min-height:320px"></div>
+          <div class="img-overlay hidden" id="overlayClean">
+            <div class="img-spinner"></div>
+            <span id="overlayCleanTxt">Loading satellite tiles…</span>
+          </div>
+        </div>
+        <div class="vision-stats">
+          <span class="vs-pill green">ESRI World Imagery</span>
+          <span class="vs-pill green">13.08°N · 80.27°E · Chennai</span>
+        </div>
+        <div class="sat-controls">
+          <label style="font-size:11px;color:var(--mu)">Area:</label>
+          <select id="satArea" class="sat-select">
+            <option value="marina">Marina &amp; Central</option>
+            <option value="adyar">South — Adyar</option>
+            <option value="annanagar">Anna Nagar</option>
+            <option value="omr">OMR / IT Corridor</option>
+            <option value="guindy">Guindy / Airport</option>
+          </select>
+          <button class="sat-reload-btn" id="satReloadBtn">↺ Reload</button>
+        </div>
+      </div>
+
+      <!-- RIGHT: Canvas copy + CSS filter + smog overlay per emission level -->
+      <div class="vision-panel">
+        <div class="vision-label-row">
+          <span class="vision-label">Smog proxy from this trip</span>
+          <span class="vs-pill" id="vsPollBadge">Calculate above ↑</span>
+        </div>
+        <div class="img-frame" style="position:relative;min-height:320px">
+          <div id="mapEffect" style="width:100%;height:100%;min-height:320px;border-radius:var(--rs);transition:filter .8s"></div>
+          <div id="smogOverlay" style="position:absolute;inset:0;border-radius:var(--rs);pointer-events:none;transition:background .8s,opacity .8s;opacity:0"></div>
+          <div class="img-overlay" id="overlayPolluted">
+            <div class="img-spinner" id="pollSpinner" style="display:none"></div>
+            <span id="overlayPollTxt">Calculate a journey above ↑</span>
+          </div>
+        </div>
+        <div class="vision-stats">
+          <span class="vs-pill" id="vsAqiPill">Local pollutant proxy…</span>
+          <span class="vs-pill" id="vsSmogPill">Haze level…</span>
+        </div>
+        <div style="font-size:10.5px;color:var(--hi);margin-top:6px;line-height:1.5">
+          Same satellite map with aerosol-style desaturation, brightness loss, and haze overlay. CO₂ is used as an activity proxy; fuel and PUC status adjust local-smog intensity.
+        </div>
+      </div>
+    </div>
+    <!-- Prompt inspection -->
+    <details id="promptDetails" style="display:none;margin-top:.75rem">
+      <summary style="font-size:12px;color:var(--mu)">View smog proxy method</summary>
+      <div style="margin-top:8px">
+        <div style="font-size:10px;color:var(--hi);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">Smog proxy method</div>
+        <div class="prompt-box" id="promptPolluted"></div>
+      </div>
+    </details>
+
+    <!-- Impact stats -->
+    <div class="vision-compare" id="visionCompare" style="display:none">
+      <div class="vc-item">
+        <div class="vc-lbl">Annual CO₂</div>
+        <div class="vc-val" id="vcAnnual">—</div>
+        <div class="vc-unit">kg CO₂/yr (250 days)</div>
+      </div>
+      <div class="vc-item">
+        <div class="vc-lbl">Trees to offset</div>
+        <div class="vc-val" id="vcTrees">—</div>
+        <div class="vc-unit">trees × 1 year</div>
+      </div>
+      <div class="vc-item">
+        <div class="vc-lbl">Local pollutant proxy</div>
+        <div class="vc-val" id="vcAqi">—</div>
+        <div class="vc-unit">index points added</div>
+      </div>
+      <div class="vc-item">
+        <div class="vc-lbl">Visibility loss</div>
+        <div class="vc-val" id="vcVis">—</div>
+        <div class="vc-unit">% vs clear satellite day</div>
+      </div>
+    </div>
+
+    <p style="font-size:10.5px;color:var(--hi);margin-top:.75rem;line-height:1.5">
+      📡 Satellite imagery: <a href="https://www.esri.com/en-us/arcgis/products/arcgis-world-imagery" target="_blank" rel="noopener" style="color:var(--blue)">ESRI World Imagery</a> (free, public).
+      Smog proxy: qualitative aerosol haze model using trip activity, fuel type, and PUC status. It is not a measured air-quality forecast.
+    </p>
+  </div>
+  <!-- ── FUEL COST COMPARISON ── -->
+  <div class="card">
+    <div class="card-title">Fuel cost comparison — Chennai prices</div>
+    <div class="cost-summary">
+      <div class="cs-box"><div class="cs-lbl">Vehicle</div><div style="font-size:12px;color:var(--mu);margin-top:2px" id="costVehName">—</div></div>
+      <div class="cs-box"><div class="cs-lbl">₹ per km</div><div class="cs-val" id="costPerKm">—</div></div>
+      <div class="cs-box"><div class="cs-lbl">Trip cost</div><div class="cs-val" id="costTrip">—</div></div>
+      <div class="cs-box"><div class="cs-lbl">Monthly (22d)</div><div class="cs-val" id="costMonth">—</div></div>
+    </div>
+    <table class="alt-table">
+      <thead><tr><th>Vehicle</th><th>Fuel</th><th>₹/km</th><th>Monthly</th></tr></thead>
+      <tbody id="altBody"></tbody>
+    </table>
+    <!-- Live price pills + badge -->
+    <div class="price-row">
+      <div class="price-pills">
+        <span class="pp petrol">⛽ <span id="ppPetrol">₹—/L</span></span>
+        <span class="pp diesel">🛢️ <span id="ppDiesel">₹—/L</span></span>
+        <span class="pp cng">💨 <span id="ppCng">₹—/kg</span></span>
+        <span class="pp electric">⚡ <span id="ppElec">₹—/kWh</span></span>
+      </div>
+      <div class="price-right">
+        <span class="pbadge loading" id="priceBadge">⏳ Fetching…</span>
+        <button class="refresh-btn" id="refreshBtn" title="Refresh prices">↻</button>
+      </div>
+    </div>
+    <div class="price-updated" id="priceUpdated"></div>
+  </div>
+
+  <!-- ── MONTHLY USAGE TRACKER ── -->
+  <div class="card">
+    <div class="card-title">My usage tracker — this device</div>
+    <div class="month-chart" id="monthChart"></div>
+    <div class="month-lbls" id="monthLbls"></div>
+    <div class="tracker-foot">
+      <span>Total calculations: <strong id="totalLocal">0</strong> <span id="firstSeenLbl" style="font-size:11px"></span></span>
+      <button class="reset-btn" id="resetBtn" title="Restore calculator defaults and clear local usage counters">Reset defaults</button>
+    </div>
+  </div>
+
+  </div><!-- /commuteSection -->
+
+  <!-- ════════════════════════════════════════════
+       TAINT ADMIN MODE
+       ════════════════════════════════════════════ -->
+  <div id="adminSection" style="display:none">
+
+  <div class="card">
+    <div class="card-title">Taint Admin overview <span class="admin-owner-pill" id="adminAccessState">Owner only</span></div>
+    <div class="admin-metrics">
+      <div class="admin-metric">
+        <div class="admin-metric-label">Unique users</div>
+        <div class="admin-metric-val" id="adminUsers">—</div>
+        <div class="admin-metric-sub" id="adminUsersLbl">waiting for stats</div>
+      </div>
+      <div class="admin-metric">
+        <div class="admin-metric-label">Calculation count</div>
+        <div class="admin-metric-val" id="adminCalcs">—</div>
+        <div class="admin-metric-sub" id="adminCalcsLbl">all time</div>
+      </div>
+      <div class="admin-metric">
+        <div class="admin-metric-label">This month</div>
+        <div class="admin-metric-val" id="adminMonth">0</div>
+        <div class="admin-metric-sub">on this device</div>
+      </div>
+    </div>
+    <div class="admin-note">Admin mode contains technical factors, scientific references, and source audit notes. Hosting instructions are intentionally kept out of the app UI and remain in the repository docs.</div>
+  </div>
+
+  <div class="card admin-layer-card">
+    <div class="card-title">Application layers</div>
+    <div class="admin-env-row">
+      <span>Environment</span>
+      <b id="adminEnvName">dev</b>
+      <span id="adminEnvProject">Supabase dev project</span>
+      <span id="adminEnvSite">GitHub Pages dev site</span>
+    </div>
+    <div class="layer-grid">
+      <div class="layer-tile presentation">
+        <b>Presentation</b>
+        <span>HTML, CSS, responsive modes, logo, loading state, and UI notifications.</span>
+      </div>
+      <div class="layer-tile business">
+        <b>Business</b>
+        <span>Carbon formulas, commute/home/workplace calculations, PUC adjustment, and recommendations.</span>
+      </div>
+      <div class="layer-tile persistence">
+        <b>Persistence</b>
+        <span>First-party guest cookie, localStorage fallback, Supabase Auth, and queued writes.</span>
+      </div>
+      <div class="layer-tile data">
+        <b>Data</b>
+        <span>Supabase tables, RPCs, JSON artifacts, media buckets, process logs, and scientific references.</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── EMISSION FACTORS TABLE ── -->
+  <div class="card factor-card">
+    <details>
+      <summary>Emission factors by vehicle &amp; fuel type</summary>
+      <table class="ft">
+        <thead><tr><th>Vehicle</th><th>Fuel</th><th>Source</th><th>g CO₂/km</th></tr></thead>
+        <tbody>
+          <tr class="gh"><td colspan="4">Two-wheelers (BS6 real-world urban)</td></tr>
+          <tr><td>E-bicycle / EV Cycle</td><td><span class="fdc"><span class="fdot electric"></span>Electric</span></td><td>ICCT 2021</td><td>11</td></tr>
+          <tr><td>EV Scooter (Ola S1, Ather)</td><td><span class="fdc"><span class="fdot electric"></span>Electric</span></td><td>ICCT 2021, CEA grid</td><td>24</td></tr>
+          <tr><td>EV Motorbike (Revolt, Ultraviolette)</td><td><span class="fdc"><span class="fdot electric"></span>Electric</span></td><td>ICCT 2021</td><td>27</td></tr>
+          <tr><td>CNG Motorbike (Bajaj Freedom 125)</td><td><span class="fdc"><span class="fdot cng"></span>CNG</span></td><td>IPCC 2006, ARAI</td><td>35</td></tr>
+          <tr><td>Petrol Scooter / Moped (BS6)</td><td><span class="fdc"><span class="fdot petrol"></span>Petrol</span></td><td>ICCT 2021, MoRTH</td><td>47</td></tr>
+          <tr><td>Petrol Motorbike 100–150cc</td><td><span class="fdc"><span class="fdot petrol"></span>Petrol</span></td><td>ICCT 2021</td><td>57</td></tr>
+          <tr><td>Petrol Bike 150cc+</td><td><span class="fdc"><span class="fdot petrol"></span>Petrol</span></td><td>ICCT 2021</td><td>78</td></tr>
+          <tr><td>Mild Hybrid Scooter (MHEV)</td><td><span class="fdc"><span class="fdot hybrid"></span>Hybrid</span></td><td>ICCT 2021 derived</td><td>34</td></tr>
+          <tr><td>Strong Hybrid Scooter (HEV)</td><td><span class="fdc"><span class="fdot hybrid"></span>Hybrid</span></td><td>ICCT 2021 derived</td><td>26</td></tr>
+          <tr class="gh"><td colspan="4">Four-wheelers (BS6 + real-world adj.)</td></tr>
+          <tr><td>EV Car — hatchback (TN grid)</td><td><span class="fdc"><span class="fdot electric"></span>Electric</span></td><td>ICCT 2021, CEA grid</td><td>91</td></tr>
+          <tr><td>EV Car — sedan/SUV (TN grid)</td><td><span class="fdc"><span class="fdot electric"></span>Electric</span></td><td>ICCT 2021, CEA grid</td><td>105</td></tr>
+          <tr><td>CNG Hatchback (WagonR CNG)</td><td><span class="fdc"><span class="fdot cng"></span>CNG</span></td><td>IPCC 2006 + ARAI</td><td>90</td></tr>
+          <tr><td>CNG Sedan</td><td><span class="fdc"><span class="fdot cng"></span>CNG</span></td><td>IPCC 2006 + ARAI</td><td>110</td></tr>
+          <tr><td>CNG SUV/MPV (Ertiga CNG)</td><td><span class="fdc"><span class="fdot cng"></span>CNG</span></td><td>IPCC 2006 + ARAI</td><td>128</td></tr>
+          <tr><td>Petrol Hatchback (Swift, i20)</td><td><span class="fdc"><span class="fdot petrol"></span>Petrol</span></td><td>MoRTH / ICCT 2021</td><td>104</td></tr>
+          <tr><td>Petrol Sedan (City, Verna) ★</td><td><span class="fdc"><span class="fdot petrol"></span>Petrol</span></td><td>MoRTH / ICCT 2021</td><td>121</td></tr>
+          <tr><td>Petrol SUV/MUV (Creta, XUV)</td><td><span class="fdc"><span class="fdot petrol"></span>Petrol</span></td><td>MoRTH / ICCT 2021</td><td>155</td></tr>
+          <tr><td>Diesel Sedan</td><td><span class="fdc"><span class="fdot diesel"></span>Diesel</span></td><td>IIT Delhi / ScienceDirect</td><td>98</td></tr>
+          <tr><td>Diesel SUV / MUV</td><td><span class="fdc"><span class="fdot diesel"></span>Diesel</span></td><td>IIT Delhi / ScienceDirect</td><td>138</td></tr>
+          <tr><td>Mild Hybrid MHEV sedan</td><td><span class="fdc"><span class="fdot hybrid"></span>Hybrid</span></td><td>ICCT LCA India 2025</td><td>88</td></tr>
+          <tr><td>Strong Hybrid HEV sedan ★</td><td><span class="fdc"><span class="fdot hybrid"></span>Hybrid</span></td><td>ICCT LCA India 2025</td><td>70</td></tr>
+          <tr><td>Strong Hybrid HEV SUV</td><td><span class="fdc"><span class="fdot hybrid"></span>Hybrid</span></td><td>ICCT LCA India 2025</td><td>90</td></tr>
+          <tr><td>PHEV sedan</td><td><span class="fdc"><span class="fdot hybrid"></span>Hybrid</span></td><td>ICCT 2021 global LCA</td><td>55</td></tr>
+          <tr><td>PHEV SUV</td><td><span class="fdc"><span class="fdot hybrid"></span>Hybrid</span></td><td>ICCT 2021 global LCA</td><td>73</td></tr>
+          <tr class="gh"><td colspan="4">Shared / Public — petrol taxis</td></tr>
+          <tr><td>Petrol Taxi hatchback (Ola/Uber Micro)</td><td><span class="fdc"><span class="fdot petrol"></span>Petrol</span></td><td>MoRTH/ICCT 2021</td><td>130</td></tr>
+          <tr><td>Petrol Taxi sedan (Ola Prime, Uber Go)</td><td><span class="fdc"><span class="fdot petrol"></span>Petrol</span></td><td>MoRTH/ICCT 2021</td><td>148</td></tr>
+          <tr><td>Petrol Taxi SUV (Ola SUV, Innova taxi)</td><td><span class="fdc"><span class="fdot petrol"></span>Petrol</span></td><td>MoRTH/ICCT 2021</td><td>168</td></tr>
+          <tr><td>Petrol Maxi-cab / Shared taxi</td><td><span class="fdc"><span class="fdot petrol"></span>Petrol</span></td><td>MoRTH/ICCT 2021</td><td>175</td></tr>
+          <tr><td>Petrol Mini-bus (school/office)</td><td><span class="fdc"><span class="fdot petrol"></span>Petrol</span></td><td>MoRTH estimated</td><td>280</td></tr>
+          <tr class="gh"><td colspan="4">Shared / Public — CNG / Diesel / Electric</td></tr>
+          <tr><td>Auto-rickshaw (CNG)</td><td><span class="fdc"><span class="fdot cng"></span>CNG</span></td><td>ScienceDirect 2022</td><td>55</td></tr>
+          <tr><td>Share Auto (CNG)</td><td><span class="fdc"><span class="fdot cng"></span>CNG</span></td><td>ScienceDirect 2022</td><td>55</td></tr>
+          <tr><td>CNG City Bus</td><td><span class="fdc"><span class="fdot cng"></span>CNG</span></td><td>IPCC 2006 + ARAI</td><td>520</td></tr>
+          <tr><td>MTC City Bus (diesel)</td><td><span class="fdc"><span class="fdot diesel"></span>Diesel</span></td><td>MoRTH / IPCC 2006</td><td>640</td></tr>
+          <tr><td>Electric Auto / E-rickshaw</td><td><span class="fdc"><span class="fdot electric"></span>Electric</span></td><td>ICCT India, CEA grid</td><td>14</td></tr>
+          <tr><td>Electric Bus (TN grid)</td><td><span class="fdc"><span class="fdot electric"></span>Electric</span></td><td>ICCT 2021, CEA grid</td><td>195</td></tr>
+          <tr><td>Metro Rail — CMRL</td><td><span class="fdc"><span class="fdot electric"></span>Electric</span></td><td>CMRL / CEA grid</td><td>35</td></tr>
+        </tbody>
+      </table>
+      <p class="factor-note">★ Key benchmarks: petrol sedan fleet avg 120.6 g/km (ICCT/MoRTH 2021); Honda City HEV ~70 g/km (ICCT LCA 2025). EV values use city/state grid intensity from CEA (current Chennai/Tamil Nadu setting: 0.716 kg CO₂/kWh). CNG via IPCC 2006 × ARAI mileage. 1 tree ≈ 21 kg CO₂/yr (IPCC AR6).</p>
+    </details>
+  </div>
+
+  <!-- ── SCIENTIFIC REFERENCES ── -->
+  <div class="card">
+    <details>
+      <summary>Scientific references</summary>
+      <div class="src-list">
+        <div class="src-item"><span class="src-tag tn">CEA</span>Central Electricity Authority. <em>CO₂ Baseline Database for the Indian Power Sector.</em> Used for state/grid electricity intensity. <a href="https://cea.nic.in/cdm-co2-baseline-database/?lang=en" target="_blank" rel="noopener">Source</a></div>
+        <div class="src-item"><span class="src-tag icct">ICCT</span>International Council on Clean Transportation. <em>Life-cycle greenhouse gas emissions of combustion engine and electric passenger cars and two-wheelers in India.</em> Used for vehicle technology comparisons. <a href="https://theicct.org/publication/life-cycle-greenhouse-gas-emissions-of-combustion-engine-and-electric-passenger-cars-and-two-wheelers-in-india/" target="_blank" rel="noopener">Source</a></div>
+        <div class="src-item"><span class="src-tag ipcc">IPCC</span>IPCC AR6 WGIII, Chapter 10: Transport. Used for transport decarbonisation framing and mitigation benchmarks. <a href="https://www.ipcc.ch/report/ar6/wg3/downloads/" target="_blank" rel="noopener">Source</a></div>
+        <div class="src-item"><span class="src-tag ipcc">IPCC</span>IPCC 2006 Guidelines for National Greenhouse Gas Inventories. Used for fuel combustion accounting principles. <a href="https://www.ipcc-nggip.iges.or.jp/public/2006gl/" target="_blank" rel="noopener">Source</a></div>
+        <div class="src-item"><span class="src-tag morth">MoRTH</span>Ministry of Road Transport &amp; Highways. Vehicular emission norms and PUC context for India. <a href="https://morth.nic.in/en/vehicular-emission-norms" target="_blank" rel="noopener">Source</a></div>
+        <div class="src-item"><span class="src-tag morth">PUC</span>National Government Services Portal. PUC certificates confirm whether vehicle emissions meet required norms; the calculator uses the PUC value as a maintenance correction, not as a direct CO₂ measurement. <a href="https://services.india.gov.in/service/detail/pollution-under-control-puc-certificate-1" target="_blank" rel="noopener">Source</a></div>
+      </div>
+      <div class="gap-list">
+        <div class="gap-item"><b>Gap fixed:</b> grid electricity now cites CEA's CO₂ Baseline Database instead of a state utility-only note, so EV and rail factors have an India power-sector source.</div>
+        <div class="gap-item"><b>Gap fixed:</b> vehicle comparisons cite ICCT's India life-cycle work and IPCC AR6 transport context instead of relying only on raw table factors.</div>
+        <div class="gap-item"><b>Gap fixed:</b> PUC is treated as a maintenance and tailpipe-pollutant proxy. It is not used as a direct CO₂ instrument.</div>
+        <div class="gap-item warn"><b>Remaining approximation:</b> city fleet mix, live congestion emissions, real AQI chemistry, and satellite-smog visuals are modeled estimates. Admin factors should be recalibrated when verified city fleet or remote-sensing data is available.</div>
+      </div>
+    </details>
+  </div>
+
+  <!-- ── HOSTING GUIDE ── -->
+  <div class="card" hidden aria-hidden="true">
+    <details>
+      <summary>How to host this page &amp; enable global stats</summary>
+      <div class="host-steps">
+        <div class="host-step"><span class="hn">1</span><div>Test locally over HTTP, not <code style="color:var(--blue);font-family:'DM Mono',monospace">file://</code>, so Supabase Auth redirects and browser storage behave like production.<div class="code-blk">python -m http.server 8787</div><div class="code-blk">http://127.0.0.1:8787/index.html</div></div></div>
+        <div class="host-step"><span class="hn">2</span><div>Deploy the static site from this repository:<div class="code-blk">GitHub Pages: Settings → Pages → Deploy from branch → main / root</div><div class="code-blk">Netlify: drag &amp; drop this folder or connect the GitHub repo</div><div class="code-blk">Vercel: import the GitHub repo as a static project</div></div></div>
+        <div class="host-step"><span class="hn">3</span><div>
+          Create a free Supabase project for global tracking:<br>
+          <div class="code-blk">supabase.com → New project → SQL Editor → run setup SQL → paste URL + anon/publishable key</div>
+        </div></div>
+        <div class="host-step"><span class="hn">4</span><div>Paste your Project URL and anon/publishable key into <code style="color:var(--blue);font-family:'DM Mono',monospace">supabase-config.js</code>.</div></div>
+        <div class="host-step"><span class="hn">5</span><div>Run <code style="color:var(--blue);font-family:'DM Mono',monospace">taint_supabase_schema.sql</code>, <code style="color:var(--blue);font-family:'DM Mono',monospace">supabase_business_storage_migration.sql</code>, <code style="color:var(--blue);font-family:'DM Mono',monospace">supabase_sensitive_data_encryption.sql</code>, and both advisor follow-up SQL files in Supabase SQL Editor.</div></div>
+        <div class="host-step"><span class="hn">6</span><div>In Supabase Authentication → URL Configuration, set the Site URL and Redirect URLs to your hosted domain. Enable Google, GitHub, or enterprise SSO in Authentication → Providers only when those buttons should appear.</div></div>
+      </div>
+    </details>
+  </div>
+
+  </div><!-- /adminSection -->
+
+  <!-- ════════════════════════════════════════════
+       WORKPLACE MODE
+       ════════════════════════════════════════════ -->
+  <div id="workplaceSection" style="display:none">
+
+  <!-- WP1: Profile -->
+  <div class="card">
+    <div class="card-title">🏢 Workplace Profile</div>
+    <div class="fg-grid">
+      <div class="fg"><label>Company / Office name</label>
+        <input type="text" id="wpName" placeholder="e.g. Acme Technologies"/></div>
+      <div class="fg"><label>Industry sector</label>
+        <select id="wpSector">
+          <option value="it">IT / Software / Tech</option>
+          <option value="finance">Finance / Banking / Insurance</option>
+          <option value="healthcare">Healthcare / Pharma</option>
+          <option value="retail">Retail / E-commerce</option>
+          <option value="manufacturing">Manufacturing / Industrial</option>
+          <option value="education">Education / Research</option>
+          <option value="hospitality">Hospitality / Food service</option>
+          <option value="other">Other / Mixed</option>
+        </select></div>
+      <div class="fg"><label>Total employees in office</label>
+        <input type="number" id="wpEmployees" min="1" value="50" placeholder="50"/></div>
+      <div class="fg"><label>Office area (sq ft)</label>
+        <input type="number" id="wpArea" min="100" value="5000" placeholder="5000"/></div>
+      <div class="fg"><label>Working days per year</label>
+        <input type="number" id="wpDays" min="1" max="365" value="250" placeholder="250"/></div>
+      <div class="fg"><label>Office occupancy (%)</label>
+        <input type="number" id="wpOccupancy" min="1" max="100" value="80" placeholder="80"/></div>
+    </div>
+  </div>
+
+  <!-- WP2: Energy -->
+  <div class="card">
+    <div class="card-title">⚡ Energy Consumption</div>
+    <div class="wp-section-lbl">Grid electricity
+      <span id="wpGridNote" style="text-transform:none;font-weight:400;letter-spacing:0;color:var(--hi);margin-left:6px;">Chennai (Tamil Nadu): 0.716 kg CO₂/kWh</span>
+    </div>
+    <div class="fg-grid">
+      <div class="fg"><label>Monthly electricity (kWh)
+        <span class="wp-or">or</span>
+        <span class="wp-note">₹ bill ÷ ₹8/kWh ≈ kWh</span></label>
+        <input type="number" id="wpElecKwh" min="0" value="8000" placeholder="8000"/></div>
+      <div class="fg"><label>Renewable / Solar share (%)</label>
+        <input type="number" id="wpSolar" min="0" max="100" value="0" placeholder="0"/></div>
+    </div>
+    <div class="wp-section-lbl">Air conditioning</div>
+    <div class="fg-grid">
+      <div class="fg"><label>Number of AC units</label>
+        <input type="number" id="wpAcUnits" min="0" value="10" placeholder="10"/></div>
+      <div class="fg"><label>Average capacity (tons each)</label>
+        <select id="wpAcTons">
+          <option value="1">1 ton</option>
+          <option value="1.5" selected>1.5 ton</option>
+          <option value="2">2 ton</option>
+          <option value="5">5 ton (cassette)</option>
+        </select></div>
+      <div class="fg"><label>Usage hours per working day</label>
+        <input type="number" id="wpAcHours" min="0" max="24" value="9" placeholder="9"/></div>
+    </div>
+    <div class="wp-section-lbl">Backup / Other fuel</div>
+    <div class="fg-grid">
+      <div class="fg"><label>Diesel generator (litres / month)</label>
+        <input type="number" id="wpDiesel" min="0" value="0" placeholder="0"/></div>
+      <div class="fg"><label>LPG / Piped gas (kg / month)</label>
+        <input type="number" id="wpLpg" min="0" value="0" placeholder="0"/></div>
+    </div>
+  </div>
+
+  <!-- WP3: Devices -->
+  <div class="card">
+    <div class="card-title">💻 Work Devices</div>
+    <div class="fg-grid">
+      <div class="fg"><label>Laptops / Tablets</label>
+        <input type="number" id="wpLaptops" min="0" value="50" placeholder="50"/></div>
+      <div class="fg"><label>Avg laptop hours / working day</label>
+        <input type="number" id="wpLaptopHrs" min="0" max="24" value="8" placeholder="8"/></div>
+      <div class="fg"><label>Desktop computers</label>
+        <input type="number" id="wpDesktops" min="0" value="0" placeholder="0"/></div>
+      <div class="fg"><label>Avg desktop hours / working day</label>
+        <input type="number" id="wpDesktopHrs" min="0" max="24" value="8" placeholder="8"/></div>
+      <div class="fg"><label>External monitors</label>
+        <input type="number" id="wpMonitors" min="0" value="30" placeholder="30"/></div>
+      <div class="fg"><label>Server room? Rated power (kW)</label>
+        <input type="number" id="wpServerKw" min="0" value="0" placeholder="0 if none"/></div>
+      <div class="fg"><label>Printer pages per month</label>
+        <input type="number" id="wpPrintPages" min="0" value="500" placeholder="500"/></div>
+    </div>
+  </div>
+
+  <!-- WP4: Business Travel -->
+  <div class="card">
+    <div class="card-title">✈️ Business Travel <span class="wp-per">(per year, whole team)</span></div>
+    <div class="wp-section-lbl">Flights</div>
+    <div class="fg-grid">
+      <div class="fg"><label>Domestic round trips</label>
+        <input type="number" id="wpDomFlights" min="0" value="0" placeholder="0"/></div>
+      <div class="fg"><label>Avg domestic flight distance (km one-way)</label>
+        <input type="number" id="wpDomFlightKm" min="0" value="800" placeholder="800"/></div>
+      <div class="fg"><label>International round trips</label>
+        <input type="number" id="wpIntlFlights" min="0" value="0" placeholder="0"/></div>
+      <div class="fg"><label>Avg international flight distance (km one-way)</label>
+        <input type="number" id="wpIntlFlightKm" min="0" value="3000" placeholder="3000"/></div>
+    </div>
+    <div class="wp-section-lbl">Ground travel</div>
+    <div class="fg-grid">
+      <div class="fg"><label>Intercity train (km / year, team total)</label>
+        <input type="number" id="wpTrainKm" min="0" value="0" placeholder="0"/></div>
+      <div class="fg"><label>Intercity road / taxi (km / year, team total)</label>
+        <input type="number" id="wpRoadKm" min="0" value="0" placeholder="0"/></div>
+    </div>
+  </div>
+
+  <!-- WP5: Remote Work -->
+  <div class="card">
+    <div class="card-title">🏠 Remote Work / WFH</div>
+    <div class="fg-grid">
+      <div class="fg"><label>WFH days per week per employee</label>
+        <input type="number" id="wpWfhDays" min="0" max="7" value="1" placeholder="1"/></div>
+      <div class="fg"><label>Typical home setup</label>
+        <select id="wpHomeSetup">
+          <option value="laptop">Laptop only (~50W)</option>
+          <option value="laptop_monitor" selected>Laptop + monitor (~80W)</option>
+          <option value="desktop">Desktop setup (~200W)</option>
+        </select></div>
+      <div class="fg"><label>Home AC hours during WFH (hrs / day)</label>
+        <input type="number" id="wpHomeAcHrs" min="0" max="24" value="4" placeholder="4"/></div>
+    </div>
+  </div>
+
+  <!-- WP6: Resources & Waste -->
+  <div class="card">
+    <div class="card-title">🗑️ Resources &amp; Waste</div>
+    <div class="fg-grid">
+      <div class="fg"><label>Paper reams / month (500 sheets each)</label>
+        <input type="number" id="wpPaper" min="0" value="10" placeholder="10"/></div>
+      <div class="fg"><label>Water consumption (litres / day)</label>
+        <input type="number" id="wpWater" min="0" value="500" placeholder="500"/></div>
+      <div class="fg"><label>Cafeteria / catered meals per day</label>
+        <input type="number" id="wpMeals" min="0" value="0" placeholder="0"/></div>
+      <div class="fg"><label>General waste (kg / month)</label>
+        <input type="number" id="wpWaste" min="0" value="50" placeholder="50"/></div>
+    </div>
+  </div>
+
+  <!-- WP7: Team Commute -->
+  <div class="card">
+    <div class="card-title">🚌 Team Commute <span class="wp-per">(aggregate)</span></div>
+    <div class="fg-grid">
+      <div class="fg"><label>Employees commuting to office daily</label>
+        <input type="number" id="wpCommuters" min="0" value="40" placeholder="40"/></div>
+      <div class="fg"><label>Average one-way distance (km)</label>
+        <input type="number" id="wpCommuteKm" min="0" value="12" placeholder="12"/></div>
+    </div>
+    <div class="wp-mode-split">
+      <div class="wp-split-lbl">Transport mode split (must sum to 100%)</div>
+      <div class="wp-split-grid">
+        <div class="wp-split-row"><span>🚗 Car / Two-wheeler (petrol)</span>
+          <input type="number" class="wp-split-inp" id="wpSplitCar" min="0" max="100" value="40"/><span>%</span></div>
+        <div class="wp-split-row"><span>🚌 Bus / MTC</span>
+          <input type="number" class="wp-split-inp" id="wpSplitBus" min="0" max="100" value="30"/><span>%</span></div>
+        <div class="wp-split-row"><span>🚆 Metro / MRTS</span>
+          <input type="number" class="wp-split-inp" id="wpSplitMetro" min="0" max="100" value="20"/><span>%</span></div>
+        <div class="wp-split-row"><span>🛺 Auto / Share</span>
+          <input type="number" class="wp-split-inp" id="wpSplitAuto" min="0" max="100" value="10"/><span>%</span></div>
+      </div>
+      <div class="wp-split-total">Total: <span id="wpSplitSum">100</span>%
+        <span class="wp-split-ok" id="wpSplitOk">✓</span></div>
+    </div>
+  </div>
+
+  <!-- WP Calculate button -->
+  <button class="wp-calc-btn" id="wpCalcBtn">Calc Workplace</button>
+
+  <!-- WP Results -->
+  <div class="card" id="wpResultCard" style="display:none">
+    <div class="card-title">📊 Workplace Carbon Footprint
+      <button class="wp-export-btn" id="wpExportBtn">📥 Export Report</button>
+    </div>
+
+    <!-- Headline number -->
+    <div class="wp-hero">
+      <div class="wp-hero-num">
+        <span id="wpTotalVal">—</span>
+        <span class="wp-hero-unit">t CO₂e / year</span>
+      </div>
+      <div class="wp-hero-sub">
+        <span id="wpPerEmp">—</span> t CO₂e per employee ·
+        <span id="wpGrade" class="sc-grade">—</span>
+      </div>
+    </div>
+
+    <!-- Scope bars -->
+    <div class="wp-scopes">
+      <div class="wp-scope-row" id="wpScope1Row">
+        <div class="wp-scope-hdr">
+          <span class="wp-scope-dot s1"></span>
+          <span class="wp-scope-name">Scope 1 — Direct emissions</span>
+          <span class="wp-scope-val" id="wpS1Val">—</span>
+        </div>
+        <div class="wp-scope-bar-wrap"><div class="wp-scope-bar s1" id="wpS1Bar"></div></div>
+        <div class="wp-scope-detail" id="wpS1Detail"></div>
+      </div>
+      <div class="wp-scope-row" id="wpScope2Row">
+        <div class="wp-scope-hdr">
+          <span class="wp-scope-dot s2"></span>
+          <span class="wp-scope-name">Scope 2 — Purchased electricity</span>
+          <span class="wp-scope-val" id="wpS2Val">—</span>
+        </div>
+        <div class="wp-scope-bar-wrap"><div class="wp-scope-bar s2" id="wpS2Bar"></div></div>
+        <div class="wp-scope-detail" id="wpS2Detail"></div>
+      </div>
+      <div class="wp-scope-row" id="wpScope3Row">
+        <div class="wp-scope-hdr">
+          <span class="wp-scope-dot s3"></span>
+          <span class="wp-scope-name">Scope 3 — Value chain</span>
+          <span class="wp-scope-val" id="wpS3Val">—</span>
+        </div>
+        <div class="wp-scope-bar-wrap"><div class="wp-scope-bar s3" id="wpS3Bar"></div></div>
+        <div class="wp-scope-detail" id="wpS3Detail"></div>
+      </div>
+    </div>
+
+    <!-- Breakdown donut + category table -->
+    <div class="wp-breakdown">
+      <svg id="wpDonut" viewBox="0 0 120 120" class="wp-donut">
+        <circle cx="60" cy="60" r="48" fill="none" stroke="var(--bd2)" stroke-width="18"/>
+      </svg>
+      <div class="wp-cat-list" id="wpCatList"></div>
+    </div>
+
+    <!-- Industry benchmark -->
+    <div class="wp-benchmark" id="wpBenchmark"></div>
+
+    <!-- Reduction tips -->
+    <div class="wp-tips" id="wpTips">
+      <div class="wp-tips-title">💡 Top reduction opportunities</div>
+      <div id="wpTipsList"></div>
+    </div>
+  </div>
+
+  <div class="card recent-card" id="workplaceHistoryCard">
+    <div class="card-title">Recent Workplace Calculations <span class="recent-meta" id="workplaceRecentMeta">latest 5</span></div>
+    <div class="recent-layout">
+      <div class="recent-list" id="workplaceRecentList"><div class="recent-empty">Sign in or calculate to see recent workplace results.</div></div>
+      <div class="trend-chart" id="workplaceTrendChart" aria-label="Workplace trend chart"></div>
+    </div>
+  </div>
+
+  </div><!-- /workplaceSection -->
+
+  <!-- ════════════════════════════════════════════
+       HOME MODE
+       ════════════════════════════════════════════ -->
+  <div id="homeSection" style="display:none">
+
+  <!-- HM1: Home Profile -->
+  <div class="card">
+    <div class="card-title">🏠 Home Profile</div>
+    <div class="fg-grid">
+      <div class="fg"><label>House type</label>
+        <select id="hmType">
+          <option value="apartment">Apartment / Flat</option>
+          <option value="independent">Independent House / Villa</option>
+          <option value="row">Row House / Duplex</option>
+          <option value="studio">Studio / 1-Room</option>
+        </select></div>
+      <div class="fg"><label>Size</label>
+        <select id="hmBhk">
+          <option value="1bhk">1 BHK (~500 sq ft)</option>
+          <option value="2bhk" selected>2 BHK (~900 sq ft)</option>
+          <option value="3bhk">3 BHK (~1400 sq ft)</option>
+          <option value="4bhk">4+ BHK / Villa (~2500 sq ft)</option>
+        </select></div>
+      <div class="fg"><label>Number of occupants</label>
+        <input type="number" id="hmOccupants" min="1" max="20" value="4" placeholder="4"/></div>
+      <div class="fg"><label>Floors in building</label>
+        <select id="hmFloor">
+          <option value="ground">Ground floor</option>
+          <option value="mid">Mid floor (2–6)</option>
+          <option value="high" selected>High floor (7+)</option>
+          <option value="independent">Independent / No lift</option>
+        </select></div>
+    </div>
+  </div>
+
+  <!-- HM2: Energy & Appliances -->
+  <div class="card">
+    <div class="card-title">⚡ Energy &amp; Appliances</div>
+    <div class="wp-section-lbl">Grid electricity
+      <span id="hmGridNote" style="text-transform:none;font-weight:400;letter-spacing:0;color:var(--hi);margin-left:6px">Chennai: 0.716 kg CO₂/kWh</span>
+    </div>
+    <div class="fg-grid">
+      <div class="fg"><label>Monthly electricity (kWh)
+        <span class="wp-note">₹ bill ÷ ₹7/kWh ≈ kWh</span></label>
+        <input type="number" id="hmElec" min="0" value="200" placeholder="200"/></div>
+      <div class="fg"><label>Solar / renewable share (%)</label>
+        <input type="number" id="hmSolar" min="0" max="100" value="0" placeholder="0"/></div>
+    </div>
+    <div class="wp-section-lbl">Air conditioning</div>
+    <div class="fg-grid">
+      <div class="fg"><label>AC units</label>
+        <input type="number" id="hmAcUnits" min="0" value="1" placeholder="1"/></div>
+      <div class="fg"><label>Capacity (tons each)</label>
+        <select id="hmAcTons">
+          <option value="1">1 ton</option>
+          <option value="1.5" selected>1.5 ton</option>
+          <option value="2">2 ton</option>
+        </select></div>
+      <div class="fg"><label>Usage hours / day</label>
+        <input type="number" id="hmAcHours" min="0" max="24" value="6" placeholder="6"/></div>
+      <div class="fg"><label>Months in use / year</label>
+        <input type="number" id="hmAcMonths" min="0" max="12" value="8" placeholder="8"/></div>
+    </div>
+    <div class="wp-section-lbl">Other appliances</div>
+    <div class="fg-grid">
+      <div class="fg"><label>Ceiling fans (count)</label>
+        <input type="number" id="hmFans" min="0" value="4" placeholder="4"/></div>
+      <div class="fg"><label>Fan usage hours / day</label>
+        <input type="number" id="hmFanHrs" min="0" max="24" value="10" placeholder="10"/></div>
+      <div class="fg"><label>Water heater / geyser</label>
+        <select id="hmGeyser">
+          <option value="none">None / Cold water</option>
+          <option value="solar_thermal">Solar thermal</option>
+          <option value="electric_2kw" selected>Electric 2 kW</option>
+          <option value="electric_3kw">Electric 3 kW</option>
+          <option value="instant">Instant / Tankless 4.5 kW</option>
+        </select></div>
+      <div class="fg"><label>Geyser usage (litres / day)</label>
+        <input type="number" id="hmGeyserL" min="0" value="60" placeholder="60"/></div>
+      <div class="fg"><label>Refrigerator size</label>
+        <select id="hmFridge">
+          <option value="small">Small &lt;180 L (~0.5 kWh/day)</option>
+          <option value="medium" selected>Medium 180–400 L (~1 kWh/day)</option>
+          <option value="large">Large 400–600 L (~1.5 kWh/day)</option>
+          <option value="double">Double door / Side-by-side (~2 kWh/day)</option>
+        </select></div>
+      <div class="fg"><label>Washing machine loads / week</label>
+        <input type="number" id="hmWash" min="0" value="5" placeholder="5"/></div>
+      <div class="fg"><label>TV / streaming hours / day</label>
+        <input type="number" id="hmTvHrs" min="0" max="24" value="3" placeholder="3"/></div>
+      <div class="fg"><label>Computers / laptops at home</label>
+        <input type="number" id="hmLaptops" min="0" value="2" placeholder="2"/></div>
+    </div>
+  </div>
+
+  <!-- HM3: Cooking -->
+  <div class="card">
+    <div class="card-title">🔥 Cooking</div>
+    <div class="fg-grid">
+      <div class="fg"><label>LPG cylinders / month
+        <span class="wp-note">(14.2 kg each, ~42 kg CO₂)</span></label>
+        <input type="number" id="hmLpg" min="0" step="0.1" value="0.8" placeholder="0.8"/></div>
+      <div class="fg"><label>PNG / piped gas (SCM / month)</label>
+        <input type="number" id="hmPng" min="0" value="0" placeholder="0"/></div>
+      <div class="fg"><label>Induction / electric cooking (hrs / day)</label>
+        <input type="number" id="hmInduction" min="0" max="8" value="0" placeholder="0"/></div>
+      <div class="fg"><label>Microwave / oven usage (hrs / day)</label>
+        <input type="number" id="hmMicrowave" min="0" max="4" value="0.25" placeholder="0.25"/></div>
+    </div>
+  </div>
+
+  <!-- HM4: Water -->
+  <div class="card">
+    <div class="card-title">💧 Water Usage</div>
+    <div class="fg-grid">
+      <div class="fg"><label>Daily household water (litres)</label>
+        <input type="number" id="hmWater" min="0" value="300" placeholder="300"/></div>
+      <div class="fg"><label>RO / water purifier (litres / day)</label>
+        <input type="number" id="hmRo" min="0" value="10" placeholder="10"/></div>
+      <div class="fg"><label>Swimming pool? (volume in litres)</label>
+        <input type="number" id="hmPool" min="0" value="0" placeholder="0 if none"/></div>
+      <div class="fg"><label>Garden / irrigation (litres / day)</label>
+        <input type="number" id="hmGarden" min="0" value="0" placeholder="0"/></div>
+    </div>
+  </div>
+
+  <!-- HM5: Personal Transport -->
+  <div class="card">
+    <div class="card-title">🚗 Personal Transport
+      <span class="wp-per">(household total, excluding daily commute)</span></div>
+    <div class="wp-section-lbl">Vehicles owned</div>
+    <div class="fg-grid">
+      <div class="fg"><label>Cars (petrol/diesel) — km / month</label>
+        <input type="number" id="hmCarKm" min="0" value="500" placeholder="500"/></div>
+      <div class="fg"><label>Car fuel type</label>
+        <select id="hmCarFuel">
+          <option value="petrol">Petrol</option>
+          <option value="diesel">Diesel</option>
+          <option value="cng">CNG</option>
+          <option value="ev">Electric</option>
+          <option value="none" selected>No car</option>
+        </select></div>
+      <div class="fg"><label>Two-wheelers — km / month</label>
+        <input type="number" id="hmBikeKm" min="0" value="300" placeholder="300"/></div>
+      <div class="fg"><label>Two-wheeler fuel</label>
+        <select id="hmBikeFuel">
+          <option value="petrol" selected>Petrol</option>
+          <option value="electric">Electric</option>
+          <option value="none">No two-wheeler</option>
+        </select></div>
+    </div>
+    <div class="wp-section-lbl">Flights &amp; ride-hailing</div>
+    <div class="fg-grid">
+      <div class="fg"><label>Domestic flights / year (round trips)</label>
+        <input type="number" id="hmDomFlights" min="0" value="2" placeholder="2"/></div>
+      <div class="fg"><label>International flights / year (round trips)</label>
+        <input type="number" id="hmIntlFlights" min="0" value="0" placeholder="0"/></div>
+      <div class="fg"><label>Cab / auto (Ola, Uber) — km / month</label>
+        <input type="number" id="hmCabKm" min="0" value="100" placeholder="100"/></div>
+    </div>
+  </div>
+
+  <!-- HM6: Diet & Food -->
+  <div class="card">
+    <div class="card-title">🍽️ Diet &amp; Food</div>
+    <div class="fg-grid">
+      <div class="fg"><label>Diet type</label>
+        <select id="hmDiet">
+          <option value="vegan">Vegan (~2.5 kg CO₂/person/day)</option>
+          <option value="vegetarian" selected>Vegetarian (~2.8 kg CO₂/person/day)</option>
+          <option value="eggetarian">Eggetarian (~3.2 kg CO₂/person/day)</option>
+          <option value="nonveg_occ">Non-veg occasionally (~3.8 kg CO₂/person/day)</option>
+          <option value="nonveg_reg">Non-veg regularly (~5.0 kg CO₂/person/day)</option>
+        </select></div>
+      <div class="fg"><label>Local / seasonal produce (%)</label>
+        <input type="number" id="hmLocalFood" min="0" max="100" value="60" placeholder="60"/></div>
+      <div class="fg"><label>Eating out / ordering meals per week</label>
+        <input type="number" id="hmEatOut" min="0" value="3" placeholder="3"/></div>
+      <div class="fg"><label>Estimated food waste (%)</label>
+        <select id="hmFoodWaste">
+          <option value="5">Minimal (~5%)</option>
+          <option value="15" selected>Average (~15%)</option>
+          <option value="30">High (~30%)</option>
+        </select></div>
+    </div>
+  </div>
+
+  <!-- HM7: Shopping & Consumption -->
+  <div class="card">
+    <div class="card-title">🛍️ Shopping &amp; Consumption</div>
+    <div class="fg-grid">
+      <div class="fg"><label>New clothing items / year (household)</label>
+        <input type="number" id="hmClothes" min="0" value="20" placeholder="20"/></div>
+      <div class="fg"><label>Electronics purchased / year
+        <span class="wp-note">(phones, gadgets)</span></label>
+        <input type="number" id="hmElectronics" min="0" value="1" placeholder="1"/></div>
+      <div class="fg"><label>Large appliances / year
+        <span class="wp-note">(TV, fridge, AC)</span></label>
+        <input type="number" id="hmAppliances" min="0" value="0" placeholder="0"/></div>
+      <div class="fg"><label>Online deliveries / week</label>
+        <input type="number" id="hmDeliveries" min="0" value="3" placeholder="3"/></div>
+      <div class="fg"><label>Furniture / home goods / year</label>
+        <select id="hmFurniture">
+          <option value="0">None this year</option>
+          <option value="1" selected>Minor (cushions, décor)</option>
+          <option value="2">Moderate (shelf, table)</option>
+          <option value="3">Major (sofa, bed, wardrobe)</option>
+        </select></div>
+    </div>
+  </div>
+
+  <!-- HM8: Waste & Recycling -->
+  <div class="card">
+    <div class="card-title">🗑️ Waste &amp; Recycling</div>
+    <div class="fg-grid">
+      <div class="fg"><label>Dry waste segregated for recycling?</label>
+        <select id="hmSegregation">
+          <option value="none">No segregation</option>
+          <option value="partial">Partial segregation</option>
+          <option value="full" selected>Full dry/wet separation</option>
+        </select></div>
+      <div class="fg"><label>Home composting?</label>
+        <select id="hmCompost">
+          <option value="no" selected>No</option>
+          <option value="partial">Partial (some wet waste)</option>
+          <option value="yes">Yes (most wet waste)</option>
+        </select></div>
+      <div class="fg"><label>E-waste properly recycled?</label>
+        <select id="hmEwaste">
+          <option value="no">No / bin disposal</option>
+          <option value="yes" selected>Yes (authorised recycler)</option>
+        </select></div>
+      <div class="fg"><label>Single-use plastic usage</label>
+        <select id="hmPlastic">
+          <option value="high">High (bags, bottles, straws daily)</option>
+          <option value="medium" selected>Medium (some reusables)</option>
+          <option value="low">Low (mostly reusables)</option>
+          <option value="none">Minimal / zero plastic</option>
+        </select></div>
+    </div>
+  </div>
+
+  <!-- HM Calculate -->
+  <button class="wp-calc-btn" id="hmCalcBtn">Calc Home</button>
+
+  <!-- HM Results -->
+  <div class="card" id="hmResultCard" style="display:none">
+    <div class="card-title">📊 Home Carbon Footprint
+      <button class="wp-export-btn" id="hmExportBtn">📥 Export Report</button>
+    </div>
+
+    <!-- Hero -->
+    <div class="wp-hero">
+      <div class="wp-hero-num">
+        <span id="hmTotalVal">—</span>
+        <span class="wp-hero-unit">t CO₂e / year</span>
+      </div>
+      <div class="wp-hero-sub">
+        <span id="hmPerCapita">—</span> t CO₂e per person ·
+        <span id="hmGrade" class="sc-grade">—</span>
+      </div>
+    </div>
+
+    <!-- Carbon budget bar -->
+    <div class="hm-budget-wrap">
+      <div class="hm-budget-bar-bg">
+        <div class="hm-budget-bar-fill" id="hmBudgetBar"></div>
+        <div class="hm-budget-marker india" id="hmMarkerIndia" title="India average">🇮🇳</div>
+        <div class="hm-budget-marker paris" id="hmMarkerParis" title="1.5°C Paris budget">🌍</div>
+        <div class="hm-budget-marker you"   id="hmMarkerYou"   title="Your footprint">📍</div>
+      </div>
+      <div class="hm-budget-labels">
+        <span>0</span>
+        <span id="hmBudgetScale"></span>
+      </div>
+      <div class="hm-budget-legend">
+        <span>🇮🇳 India avg 1.9 t</span>
+        <span>🌍 Paris 1.5°C budget 2.3 t/yr</span>
+        <span>📍 You</span>
+      </div>
+    </div>
+
+    <!-- Category breakdown -->
+    <div class="wp-breakdown">
+      <svg id="hmDonut" viewBox="0 0 120 120" class="wp-donut">
+        <circle cx="60" cy="60" r="48" fill="none" stroke="var(--bd2)" stroke-width="18"/>
+      </svg>
+      <div class="wp-cat-list" id="hmCatList"></div>
+    </div>
+
+    <!-- Scope bars -->
+    <div class="wp-scopes">
+      <div class="wp-scope-row">
+        <div class="wp-scope-hdr">
+          <span class="wp-scope-dot s1"></span>
+          <span class="wp-scope-name">Scope 1 — Direct (cooking gas, vehicles)</span>
+          <span class="wp-scope-val" id="hmS1Val">—</span>
+        </div>
+        <div class="wp-scope-bar-wrap"><div class="wp-scope-bar s1" id="hmS1Bar"></div></div>
+        <div class="wp-scope-detail" id="hmS1Detail"></div>
+      </div>
+      <div class="wp-scope-row">
+        <div class="wp-scope-hdr">
+          <span class="wp-scope-dot s2"></span>
+          <span class="wp-scope-name">Scope 2 — Home electricity</span>
+          <span class="wp-scope-val" id="hmS2Val">—</span>
+        </div>
+        <div class="wp-scope-bar-wrap"><div class="wp-scope-bar s2" id="hmS2Bar"></div></div>
+        <div class="wp-scope-detail" id="hmS2Detail"></div>
+      </div>
+      <div class="wp-scope-row">
+        <div class="wp-scope-hdr">
+          <span class="wp-scope-dot s3"></span>
+          <span class="wp-scope-name">Scope 3 — Food, shopping, flights, water, waste</span>
+          <span class="wp-scope-val" id="hmS3Val">—</span>
+        </div>
+        <div class="wp-scope-bar-wrap"><div class="wp-scope-bar s3" id="hmS3Bar"></div></div>
+        <div class="wp-scope-detail" id="hmS3Detail"></div>
+      </div>
+    </div>
+
+    <!-- Benchmark -->
+    <div class="wp-benchmark" id="hmBenchmark"></div>
+
+    <!-- Tips -->
+    <div class="wp-tips" id="hmTips">
+      <div class="wp-tips-title">💡 Top reduction opportunities</div>
+      <div id="hmTipsList"></div>
+    </div>
+  </div>
+
+  <div class="card recent-card" id="homeHistoryCard">
+    <div class="card-title">Recent Home Calculations <span class="recent-meta" id="homeRecentMeta">latest 5</span></div>
+    <div class="recent-layout">
+      <div class="recent-list" id="homeRecentList"><div class="recent-empty">Sign in or calculate to see recent home results.</div></div>
+      <div class="trend-chart" id="homeTrendChart" aria-label="Home trend chart"></div>
+    </div>
+  </div>
+
+  </div><!-- /homeSection -->
+
+  <!-- ════════════════════════════════════════════
+       MY TAINT — unified wizard
+       ════════════════════════════════════════════ -->
+  <div id="taintSection" style="display:none">
+
+  <!-- Progress header -->
+  <div class="mt-progress-wrap">
+    <div class="mt-steps" id="mtSteps">
+      <div class="mt-step active" data-step="0"><span class="mt-dot">1</span><span class="mt-slbl">Profile</span></div>
+      <div class="mt-step" data-step="1"><span class="mt-dot">2</span><span class="mt-slbl">Commute</span></div>
+      <div class="mt-step" data-step="2"><span class="mt-dot">3</span><span class="mt-slbl">Workplace</span></div>
+      <div class="mt-step" data-step="3"><span class="mt-dot">4</span><span class="mt-slbl">Home</span></div>
+      <div class="mt-step" data-step="4"><span class="mt-dot">5</span><span class="mt-slbl">Results</span></div>
+      <div class="mt-step" data-step="5"><span class="mt-dot">6</span><span class="mt-slbl">Reflect</span></div>
+    </div>
+    <div class="mt-prog-bar"><div class="mt-prog-fill" id="mtProgFill"></div></div>
+  </div>
+
+  <!-- Step panels -->
+  <div class="mt-panel" id="mtStep0">
+    <div class="mt-panel-title">👋 Welcome to My Taint</div>
+    <p class="mt-desc">Your complete personal carbon profile — commute, workplace and home combined in one guided flow. Takes about 3 minutes.</p>
+    <div class="fg-grid">
+      <div class="fg"><label>Your name (optional)</label>
+        <input type="text" id="mtName" placeholder="e.g. Priya"/></div>
+      <div class="fg"><label>City</label>
+        <select id="mtCity">
+          <option value="chennai">Chennai</option><option value="mumbai">Mumbai</option>
+          <option value="delhi">Delhi NCR</option><option value="bangalore">Bengaluru</option>
+          <option value="hyderabad">Hyderabad</option><option value="kolkata">Kolkata</option>
+          <option value="pune">Pune</option><option value="ahmedabad">Ahmedabad</option>
+          <option value="kochi">Kochi</option><option value="jaipur">Jaipur</option>
+        </select></div>
+      <div class="fg"><label>Household size</label>
+        <input type="number" id="mtOccupants" min="1" max="20" value="3" placeholder="3"/></div>
+      <div class="fg"><label>I mostly want to track</label>
+        <select id="mtFocus">
+          <option value="all">All — commute + workplace + home</option>
+          <option value="commute">Daily commute only</option>
+          <option value="home">Home & lifestyle</option>
+        </select></div>
+    </div>
+  </div>
+
+  <div class="mt-panel" id="mtStep1" style="display:none">
+    <div class="mt-panel-title">🚗 Daily Commute</div>
+    <p class="mt-desc">How do you typically get to work or school?</p>
+    <div class="fg-grid">
+      <div class="fg"><label>One-way distance (km)</label>
+        <input type="number" id="mtCommuteKm" min="0" value="12" placeholder="12"/></div>
+      <div class="fg"><label>Travel mode</label>
+        <select id="mtCommuteMode">
+          <option value="walk">🚶 Walk</option>
+          <option value="cycle">🚲 Cycle / E-bike</option>
+          <option value="two_petrol">🛵 Two-wheeler (petrol)</option>
+          <option value="two_ev">⚡ Two-wheeler (electric)</option>
+          <option value="car_petrol">🚗 Car (petrol)</option>
+          <option value="car_ev">🚗 Car (electric)</option>
+          <option value="car_cng">🚗 Car (CNG)</option>
+          <option value="auto">🛺 Auto / Share Auto</option>
+          <option value="bus">🚌 City Bus</option>
+          <option value="metro" selected>🚆 Metro / Train</option>
+          <option value="cab">📱 Cab (Ola / Uber)</option>
+        </select></div>
+      <div class="fg"><label>Days per week</label>
+        <input type="number" id="mtCommuteDays" min="1" max="7" value="5" placeholder="5"/></div>
+      <div class="fg"><label>Passengers (if carpooling)</label>
+        <input type="number" id="mtCommutePax" min="1" max="10" value="1" placeholder="1"/></div>
+    </div>
+    <div class="mt-saved-badge" id="mtCommuteResult"></div>
+  </div>
+
+  <div class="mt-panel" id="mtStep2" style="display:none">
+    <div class="mt-panel-title">🏢 Workplace Contribution</div>
+    <p class="mt-desc">Your share of your office's carbon footprint — roughly per employee.</p>
+    <div class="fg-grid">
+      <div class="fg"><label>Monthly office electricity (kWh)
+        <span class="wp-note">÷ employees for your share</span></label>
+        <input type="number" id="mtOfficeElec" min="0" value="200" placeholder="200"/></div>
+      <div class="fg"><label>AC hours at office per day</label>
+        <input type="number" id="mtOfficeAcHrs" min="0" max="16" value="8" placeholder="8"/></div>
+      <div class="fg"><label>WFH days per week</label>
+        <input type="number" id="mtWfhDays" min="0" max="7" value="1" placeholder="1"/></div>
+      <div class="fg"><label>Domestic flights / year (round trips)</label>
+        <input type="number" id="mtBizFlights" min="0" value="0" placeholder="0"/></div>
+    </div>
+    <div class="mt-saved-badge" id="mtWorkplaceResult"></div>
+  </div>
+
+  <div class="mt-panel" id="mtStep3" style="display:none">
+    <div class="mt-panel-title">🏠 Home &amp; Lifestyle</div>
+    <p class="mt-desc">Energy, cooking, diet and shopping at home.</p>
+    <div class="fg-grid">
+      <div class="fg"><label>Monthly home electricity (kWh)</label>
+        <input type="number" id="mtHomeElec" min="0" value="150" placeholder="150"/></div>
+      <div class="fg"><label>LPG cylinders / month</label>
+        <input type="number" id="mtHomeLpg" min="0" step="0.1" value="0.8" placeholder="0.8"/></div>
+      <div class="fg"><label>AC units at home</label>
+        <input type="number" id="mtHomeAc" min="0" value="1" placeholder="1"/></div>
+      <div class="fg"><label>AC hours / day</label>
+        <input type="number" id="mtHomeAcHrs" min="0" max="24" value="5" placeholder="5"/></div>
+      <div class="fg"><label>Diet type</label>
+        <select id="mtDiet">
+          <option value="vegan">Vegan</option>
+          <option value="vegetarian" selected>Vegetarian</option>
+          <option value="eggetarian">Eggetarian</option>
+          <option value="nonveg_occ">Non-veg occasionally</option>
+          <option value="nonveg_reg">Non-veg regularly</option>
+        </select></div>
+      <div class="fg"><label>Personal vehicle km / month</label>
+        <input type="number" id="mtPersonalKm" min="0" value="200" placeholder="200"/></div>
+    </div>
+    <div class="mt-saved-badge" id="mtHomeResult"></div>
+  </div>
+
+  <!-- Step 4: Results -->
+  <div class="mt-panel" id="mtStep4" style="display:none">
+    <div class="mt-panel-title">📊 Your Carbon Profile</div>
+    <div class="mt-result-hero" id="mtHero">
+      <span class="mt-total-val" id="mtTotalVal">—</span>
+      <span class="mt-total-unit">t CO₂e / year</span>
+      <span class="sc-grade" id="mtGrade">—</span>
+    </div>
+    <!-- Breakdown strips -->
+    <div class="mt-breakdown" id="mtBreakdown"></div>
+    <!-- Budget bar (reuse hm-budget styles) -->
+    <div class="hm-budget-wrap" style="margin-top:12px">
+      <div class="hm-budget-bar-bg">
+        <div class="hm-budget-bar-fill" id="mtBudgetBar"></div>
+        <div class="hm-budget-marker india" id="mtMarkerIndia">🇮🇳</div>
+        <div class="hm-budget-marker paris" id="mtMarkerParis">🌍</div>
+        <div class="hm-budget-marker you"   id="mtMarkerYou">📍</div>
+      </div>
+      <div class="hm-budget-labels"><span>0</span><span id="mtBudgetScale"></span></div>
+      <div class="hm-budget-legend">
+        <span>🇮🇳 India avg 1.9 t/person</span>
+        <span>🌍 Paris 1.5°C budget 2.3 t</span>
+        <span>📍 You</span>
+      </div>
+    </div>
+    <div class="wp-benchmark" id="mtBenchmark" style="margin-top:12px"></div>
+    <div class="wp-tips" id="mtTips" style="margin-top:10px">
+      <div class="wp-tips-title">💡 Your top 3 actions</div>
+      <div id="mtTipsList"></div>
+    </div>
+  </div>
+
+  <!-- Step 5: Tool footprint + Feedback -->
+  <div class="mt-panel" id="mtStep5" style="display:none">
+    <div class="mt-panel-title">🌱 Reflect &amp; Improve</div>
+
+    <!-- Site carbon (clone display, updated from main SC object) -->
+    <div class="card" style="margin-bottom:12px">
+      <div class="card-title">
+        🌱 This tool's carbon footprint
+        <span class="sc-grade" id="mtScGrade">—</span>
+      </div>
+      <div class="sc-body">
+        <div class="sc-hero">
+          <span class="sc-co2-val" id="mtScVal">—</span>
+          <span class="sc-co2-unit" id="mtScUnit">mg CO₂</span>
+          <span class="sc-live-dot"></span>
+        </div>
+        <div class="rr-stats" style="margin-top:6px;font-size:11.5px;color:var(--mu)">
+          Using this tool for your session emits <span id="mtScSummary">calculating…</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Feedback (moved here from bottom of page) -->
+    <div class="card" id="mtFeedbackCard">
+      <div class="card-title">💬 Share Your Feedback</div>
+      <div id="mtFeedbackBody">
+        <div class="star-row" id="mtStarRow">
+          <span class="star" data-v="1">★</span><span class="star" data-v="2">★</span>
+          <span class="star" data-v="3">★</span><span class="star" data-v="4">★</span>
+          <span class="star" data-v="5">★</span>
+        </div>
+        <textarea id="mtFeedbackText" class="fb-textarea" placeholder="What could we improve?"></textarea>
+        <button class="wp-calc-btn" id="mtFeedbackSubmit" style="margin-top:8px;padding:10px;font-size:13px">Submit Feedback</button>
+      </div>
+    </div>
+
+    <!-- Export whole profile -->
+    <button class="wp-calc-btn" id="mtExportBtn" style="margin-top:4px">📥 Export My Full Carbon Profile</button>
+  </div>
+
+  <!-- Wizard navigation -->
+  <div class="mt-action-row" id="mtCalcAction" hidden>
+    <button class="wp-calc-btn compact-calc" id="mtCalcBtn">Calculate My Taint</button>
+  </div>
+  <div class="mt-nav">
+    <button class="mt-nav-btn prev" id="mtPrevBtn" disabled>← Previous</button>
+    <button class="mt-nav-btn skip" id="mtSkipBtn">Skip →</button>
+    <button class="mt-nav-btn save" id="mtSaveBtn">Save &amp; Next →</button>
+  </div>
+
+  <div class="card recent-card" id="taintHistoryCard">
+    <div class="card-title">Recent My Taint Profiles <span class="recent-meta" id="taintRecentMeta">latest 5</span></div>
+    <div class="recent-layout">
+      <div class="recent-list" id="taintRecentList"><div class="recent-empty">Sign in or calculate to see recent My Taint profiles.</div></div>
+      <div class="trend-chart" id="taintTrendChart" aria-label="My Taint trend chart"></div>
+    </div>
+  </div>
+
+  </div><!-- /taintSection -->
+
+  <!-- ════════════════════════════════════════════
+       TAINT BUY — Green product affiliate marketplace
+       ════════════════════════════════════════════ -->
+  <div id="buySection" style="display:none">
+
+  <!-- Disclosure banner -->
+  <div class="tb-disclosure">
+    <span>Taint Buy earns affiliate commission when you purchase through our links.</span>
+    <span>Products are selected <b>only by carbon footprint criteria</b> — never by commission rate.</span>
+    <a href="#tbHowItWorks" class="tb-disc-link">How it works ↓</a>
+  </div>
+
+  <!-- AI Recommendations strip -->
+  <div class="card tb-ai-card" id="tbAiCard">
+    <div class="card-title">Recommended for You
+      <span class="tb-ai-badge">AI-powered</span>
+    </div>
+    <div class="tb-ai-body" id="tbAiBody">
+      <div class="tb-ai-hint">Complete <strong>My Taint</strong> first to get personalised picks based on your biggest carbon sources.</div>
+    </div>
+    <button class="tb-ai-btn" id="tbAiBtn">Get My Picks</button>
+  </div>
+
+  <!-- Category filter -->
+  <div class="tb-filter-row">
+    <button class="tb-filter active" data-cat="all">All</button>
+    <button class="tb-filter" data-cat="transport">Transport</button>
+    <button class="tb-filter" data-cat="energy">Energy</button>
+    <button class="tb-filter" data-cat="home">Home</button>
+    <button class="tb-filter" data-cat="kitchen">Kitchen</button>
+    <button class="tb-filter" data-cat="lifestyle">Lifestyle</button>
+    <button class="tb-filter" data-cat="fashion">Fashion</button>
+  </div>
+
+  <!-- Sort bar -->
+  <div class="tb-sort-row">
+    <span class="tb-count" id="tbCount">25 products</span>
+    <select class="tb-sort-sel" id="tbSort">
+      <option value="saving">Most CO₂ saved</option>
+      <option value="price_asc">Price: Low to high</option>
+      <option value="price_desc">Price: High to low</option>
+      <option value="eco">Eco score</option>
+    </select>
+  </div>
+
+  <!-- Product grid -->
+  <div class="tb-grid" id="tbGrid"></div>
+
+  <div class="card recent-card" id="buyHistoryCard">
+    <div class="card-title">Taint Buy Checkout List <span class="recent-meta" id="buyRecentMeta">latest 5</span></div>
+    <div class="recent-layout">
+      <div class="recent-list" id="buyRecentList"><div class="recent-empty">Open a vendor link or mark a product bought to build your list.</div></div>
+      <div class="trend-chart" id="buyTrendChart" aria-label="Taint Buy trend chart"></div>
+    </div>
+  </div>
+
+  <!-- How it works -->
+  <div class="card" id="tbHowItWorks" style="margin-top:24px">
+    <div class="card-title">How Taint Buy Works</div>
+    <div class="tb-how-grid">
+      <div class="tb-how-item">
+        <span class="tb-how-icon">CO2</span>
+        <b>Screened by carbon</b>
+        <span>Every product is evaluated on lifecycle CO₂, energy efficiency (BEE star rating), and material sourcing. We reject products that don't meet our threshold.</span>
+      </div>
+      <div class="tb-how-item">
+        <span class="tb-how-icon">Link</span>
+        <b>Affiliate links</b>
+        <span>Clicking "Buy on Amazon" or "Buy on Flipkart" adds our affiliate tag to the URL. You pay the same price — the retailer shares a small commission with us (2–12%).</span>
+      </div>
+      <div class="tb-how-item">
+        <span class="tb-how-icon">Brand</span>
+        <b>Brand partnerships</b>
+        <span>Some brands (EVs, solar) offer referral bonuses for qualified leads. We disclose these on each card. No sponsored placement — ranking is always by CO₂ saved.</span>
+      </div>
+      <div class="tb-how-item">
+        <span class="tb-how-icon">10%</span>
+        <b>Carbon offset</b>
+        <span>10% of every commission we earn goes toward verified Indian reforestation projects (Gold Standard certified).</span>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ── TAINT CONTACT ── -->
+  <div class="card tc-card">
+    <div class="card-title">📬 Contact</div>
+    <div class="tc-grid">
+
+      <!-- LEFT: Site carbon footprint (live, from SC tracker) -->
+      <div class="tc-panel tc-carbon">
+        <div class="tc-panel-title">This Tool's Carbon Footprint</div>
+        <div class="sc-hero" style="margin:8px 0">
+          <span class="sc-co2-val" id="tcScVal">—</span>
+          <span class="sc-co2-unit" id="tcScUnit">mg CO₂</span>
+          <span class="sc-live-dot"></span>
+        </div>
+        <div class="tc-sc-rows">
+          <div class="tc-sc-row">
+            <span class="tc-sc-dot" style="background:#34d399"></span>
+            <span>📄 Page load</span>
+            <span id="tcPageCO2" class="tc-sc-val">—</span>
+          </div>
+          <div class="tc-sc-row">
+            <span class="tc-sc-dot" style="background:#60a5fa"></span>
+            <span>🗺 Map tiles (<span id="tcTileCount">0</span>)</span>
+            <span id="tcTileCO2" class="tc-sc-val">—</span>
+          </div>
+          <div class="tc-sc-row">
+            <span class="tc-sc-dot" style="background:#fb923c"></span>
+            <span>🌐 API calls (<span id="tcApiCount">0</span>)</span>
+            <span id="tcApiCO2" class="tc-sc-val">—</span>
+          </div>
+        </div>
+        <div class="tc-sc-meta">SWD model · India grid 716 g CO₂/kWh</div>
+      </div>
+
+      <!-- RIGHT: Feedback form -->
+      <div class="tc-panel tc-feedback">
+        <div class="tc-panel-title">Send Feedback</div>
+        <p class="tc-desc">Found a bug, have a suggestion, or want a new vehicle? Sent directly to <strong>taint.calculator@gmail.com</strong>.</p>
+        <form class="fb-form" id="fbForm" novalidate>
+          <div class="fb-row">
+            <div class="fb-grp">
+              <label for="fbName">Your name</label>
+              <input type="text" id="fbName" placeholder="e.g. Arun Kumar" maxlength="60"/>
+            </div>
+            <div class="fb-grp">
+              <label for="fbType">Type</label>
+              <select id="fbType">
+                <option value="suggestion">💡 Suggestion</option>
+                <option value="bug">🐛 Bug report</option>
+                <option value="vehicle">🚗 Vehicle request</option>
+                <option value="data">📊 Data correction</option>
+                <option value="general">💬 General comment</option>
+                <option value="praise">🙌 Appreciation</option>
+              </select>
+            </div>
+          </div>
+          <div class="fb-grp">
+            <label>Rate this tool</label>
+            <div class="stars" id="starRow">
+              <span class="star" data-v="1">⭐</span><span class="star" data-v="2">⭐</span>
+              <span class="star" data-v="3">⭐</span><span class="star" data-v="4">⭐</span>
+              <span class="star" data-v="5">⭐</span>
+            </div>
+          </div>
+          <div class="fb-grp">
+            <label for="fbMsg">Message <span style="color:var(--red)">*</span></label>
+            <textarea id="fbMsg" placeholder="Describe your feedback…" maxlength="1000" required></textarea>
+          </div>
+          <div class="fb-grp">
+            <label for="fbEmail">Email (optional — for replies)</label>
+            <input type="email" id="fbEmail" placeholder="your@email.com" maxlength="100"/>
+          </div>
+          <div class="fb-err-msg" id="fbErr">Please write your feedback before submitting.</div>
+          <button class="wp-calc-btn" id="fbSubmit" type="submit" style="margin:8px 0;padding:10px;font-size:13px">📬 Send Feedback →</button>
+        </form>
+        <div class="fb-ok" id="fbOk">✅ Thank you! Your feedback has been saved and sent.</div>
+        <div class="comments-section">
+          <div class="cs-title">Feedback from this device</div>
+          <div id="fbList"><div class="fb-empty">No feedback yet.</div></div>
+        </div>
+        <div class="fb-setup-hint">
+          <b>📬 Setup:</b> Check <code style="font-size:11px;background:var(--s2);padding:1px 5px;border-radius:4px">taint.calculator@gmail.com</code> for a FormSubmit activation link on first use.
+          <button class="fb-test-btn" id="fbTestBtn" style="margin-top:6px">🧪 Send Test Email</button>
+          <span class="fb-test-result" id="fbTestResult"></span>
+        </div>
+      </div>
+
+    </div><!-- /tc-grid -->
+
+    <div class="cookie-panel" id="cookiePanel">
+      <div>
+        <b>Cookie use</b>
+        <span>This app stores only the first-party <code>taint_skip_auth</code> preference cookie for guest mode. GitHub Pages hosts the static app; it does not read GitHub account cookies or add tracking cookies.</span>
+      </div>
+      <button class="cookie-clear-btn" id="cookieClearBtn" type="button">Clear Cookie</button>
+    </div>
+
+    <!-- Contact + data sources strip -->
+    <div class="tc-footer">
+      <div class="tc-contact">
+        <span>📧 <a href="mailto:taint.calculator@gmail.com">taint.calculator@gmail.com</a></span>
+        <span>·</span>
+        <span style="color:var(--hi);font-size:12px">Data corrections · partnerships · media</span>
+      </div>
+      <div class="tc-sources">
+        Sources:
+        <a href="https://theicct.org" target="_blank" rel="noopener">ICCT</a> ·
+        <a href="https://www.ipcc.ch" target="_blank" rel="noopener">IPCC</a> ·
+        <a href="https://morth.nic.in" target="_blank" rel="noopener">MoRTH</a> ·
+        <a href="https://aqicn.org" target="_blank" rel="noopener">WAQI</a> ·
+        <a href="https://www.openstreetmap.org" target="_blank" rel="noopener">OSM</a>
+        &nbsp;·&nbsp; © 2025 · No ads · No tracking · First-party cookies only.
+      </div>
+    </div>
+  </div>
+
+
+  </div><!-- /buySection -->
+
+  <!-- siteCarbonCard removed — now in Taint Contact within Taint Buy -->
+  <div id="siteCarbonCard" style="display:none" aria-hidden="true"></div>
+
+  </div><!-- /app-content -->
+</main><!-- /wrap -->
+
+<!-- ═══════════════════════════════════════════════
+     SUPABASE CONFIG  — free Firebase alternative
+     Setup (takes ~3 min):
+       1. supabase.com → New project (free tier)
+       2. SQL Editor → run:
+            CREATE TABLE stats (
+              key   TEXT PRIMARY KEY,
+              value BIGINT NOT NULL DEFAULT 0
+            );
+            INSERT INTO stats (key) VALUES ('uniqueUsers'),('totalCalcs')
+              ON CONFLICT DO NOTHING;
+            CREATE OR REPLACE FUNCTION increment_stat(stat_key TEXT)
+            RETURNS void LANGUAGE plpgsql AS $$
+            BEGIN
+              INSERT INTO stats(key,value) VALUES(stat_key,1)
+              ON CONFLICT(key) DO UPDATE SET value = stats.value + 1;
+            END;$$;
+            -- Allow anonymous reads and the increment RPC:
+            ALTER TABLE stats ENABLE ROW LEVEL SECURITY;
+            CREATE POLICY "read stats" ON stats FOR SELECT USING (true);
+            GRANT EXECUTE ON FUNCTION increment_stat TO anon;
+       3. Settings → API → copy Project URL and anon/public key below
+     Leave as-is to run in local-only mode (no global stats).
+     ═══════════════════════════════════════════════ -->
+<script src="./supabase-config.js?v=20260601-prod-branding"></script>
+<script src="./assets/js/supabase-runtime-config.js?v=20260601-prod-branding" defer></script>
+
+<!-- ═══════════════════════════════════════════════
+     MAIN APPLICATION SCRIPT
+     ═══════════════════════════════════════════════ -->
+<script src="./assets/js/app.js?v=20260601-prod-branding" defer></script>
+<!-- ── AUTH OVERLAY ── -->
+<div class="auth-overlay hidden" id="authOverlay">
+  <div class="auth-card" id="authCard">
+    <div class="auth-brand">Carbon Calculator</div>
+    <div class="auth-tagline">Track · Reduce · Act · <span style="color:var(--hi)">Carbon Calculator for India</span></div>
+
+    <div class="auth-tabs" id="authTabs">
+      <button class="auth-tab active" data-tab="signin">Sign In</button>
+      <button class="auth-tab"        data-tab="signup">Sign Up</button>
+    </div>
+
+    <div class="auth-body">
+      <div class="auth-field" id="authNameField" style="display:none">
+        <label>Username</label>
+        <input type="text" id="authName" class="auth-input" placeholder="Letters, numbers, spaces, . _ -" autocomplete="username" maxlength="60"/>
+      </div>
+      <div class="auth-field" id="authEmailField">
+        <label>Email</label>
+        <input type="email" id="authEmail" class="auth-input" placeholder="you@example.com" autocomplete="email" maxlength="120"/>
+      </div>
+      <div class="auth-field" id="authPasswordField">
+        <label id="authPasswordLabel">Password</label>
+        <input type="password" id="authPassword" class="auth-input" placeholder="Minimum 8 characters" autocomplete="current-password" maxlength="72"/>
+      </div>
+      <div class="auth-field" id="authConfirmPasswordField" style="display:none">
+        <label>Confirm new password</label>
+        <input type="password" id="authConfirmPassword" class="auth-input" placeholder="Re-enter new password" autocomplete="new-password" maxlength="72"/>
+      </div>
+      <div class="auth-error" id="authError"></div>
+      <div class="auth-success" id="authSuccess" hidden></div>
+      <button class="auth-submit" id="authSubmit">Sign In</button>
+      <div class="auth-help-row">
+        <button class="auth-link-btn" id="authForgotBtn" type="button">Forgot password?</button>
+        <button class="auth-link-btn" id="authBackToSignInBtn" type="button" hidden>Back to sign in</button>
+      </div>
+    </div>
+
+    <div class="auth-or"><span>or</span></div>
+
+    <button class="auth-google-btn" id="authGoogle">
+      <svg width="18" height="18" viewBox="0 0 18 18" style="margin-right:8px"><path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.25-.164-1.84H9v3.48h4.844c-.209 1.125-.843 2.078-1.796 2.716v2.258h2.908c1.702-1.567 2.684-3.875 2.684-6.614z"/><path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"/><path fill="#FBBC05" d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z"/><path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 6.29C4.672 4.163 6.656 3.58 9 3.58z"/></svg>
+      Continue with Google
+    </button>
+    <button class="auth-google-btn" id="authGithub">Continue with GitHub</button>
+    <div class="auth-provider-note" id="authProviderNote" hidden></div>
+    <div class="auth-sso-row">
+      <input type="text" id="authSsoDomain" class="auth-input" placeholder="company.com for SSO" autocomplete="organization"/>
+      <button class="auth-sso-btn" id="authSsoBtn">SSO</button>
+    </div>
+
+    <button class="auth-skip" id="authSkip">Continue as guest  →</button>
+
+    <p class="auth-note">Your calculations run entirely in your browser. Sign in to sync your profile across devices. Confirmation and reset links are sent by email; passwords are never emailed.</p>
+  </div>
+</div>
+<div class="cookie-consent hidden" id="cookieConsent" role="dialog" aria-live="polite" aria-label="Cookie notice">
+  <div>
+    <b>Cookie use</b>
+    <span>This app uses one first-party preference cookie for guest mode and this acknowledgement. No ads, no tracking, and no GitHub account cookies are read.</span>
+  </div>
+  <button type="button" id="cookieAcceptBtn">Accept</button>
+</div>
+<div class="toast-region" id="toastRegion" aria-live="polite" aria-atomic="false"></div>
+
+</body>
+</html>
