@@ -518,9 +518,19 @@ function tickClock() {
   const hh = String(n.getHours()).padStart(2,'0');
   const mm = String(n.getMinutes()).padStart(2,'0');
   const ss = String(n.getSeconds()).padStart(2,'0');
-  document.getElementById('cTime').textContent = `${hh}:${mm}:${ss}`;
-  document.getElementById('cDay').textContent  = DAYS[n.getDay()];
-  document.getElementById('cDate').textContent = `${n.getDate()} ${MONTHS[n.getMonth()]} ${n.getFullYear()}`;
+  const timeText = `${hh}:${mm}:${ss}`;
+  const dayText = DAYS[n.getDay()];
+  const dateText = `${n.getDate()} ${MONTHS[n.getMonth()]} ${n.getFullYear()}`;
+  const setClockText = (id, value) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = value;
+  };
+  setClockText('cTime', timeText);
+  setClockText('cDay', dayText);
+  setClockText('cDate', dateText);
+  setClockText('welcomeTime', timeText);
+  setClockText('welcomeDay', dayText);
+  setClockText('welcomeDate', dateText);
 }
 
 // ──────────────────────────────────────────────────────
@@ -528,14 +538,19 @@ function tickClock() {
 // ──────────────────────────────────────────────────────
 function applyTheme(light) {
   document.documentElement.classList.toggle('light', light);
-  document.getElementById('themeBtn').textContent = light ? '🌙 Dark' : '☀️ Light';
+  const themeBtn = document.getElementById('themeBtn');
+  if (themeBtn) themeBtn.textContent = light ? 'Dark' : 'Light';
   document.getElementById('themeMeta').content = light ? '#f4f6f8' : '#090b0d';
+  document.getElementById('prefThemeLight')?.classList.toggle('active', light);
+  document.getElementById('prefThemeDark')?.classList.toggle('active', !light);
   try { localStorage.setItem('taint_theme', light ? 'light' : 'dark'); } catch(e){}
 }
 
-document.getElementById('themeBtn').addEventListener('click', () => {
+document.getElementById('themeBtn')?.addEventListener('click', () => {
   applyTheme(!document.documentElement.classList.contains('light'));
 });
+document.getElementById('prefThemeDark')?.addEventListener('click', () => applyTheme(false));
+document.getElementById('prefThemeLight')?.addEventListener('click', () => applyTheme(true));
 
 // ──────────────────────────────────────────────────────
 //  AQI — WAQI API (free demo token works for Chennai)
@@ -559,15 +574,19 @@ async function fetchAQI() {
     const lv  = aqiLevel(aqi);
     /* Update topbar chip */
     const chip = document.getElementById('aqiChip');
-    chip.className = `aqi-chip ${lv.cls}`;
-    document.getElementById('aqiEmoji').textContent = lv.emoji;
-    document.getElementById('aqiVal').textContent   = aqi;
-    document.getElementById('aqiLbl').textContent   = lv.label;
-    chip.title = `${city().name} AQI ${aqi} — ${lv.label} · WAQI/CPCB`;
+    if (chip) {
+      chip.className = `aqi-chip ${lv.cls}`;
+      document.getElementById('aqiEmoji').textContent = lv.emoji;
+      document.getElementById('aqiVal').textContent   = aqi;
+      document.getElementById('aqiLbl').textContent   = lv.label;
+      chip.title = `${city().name} AQI ${aqi} — ${lv.label} · WAQI/CPCB`;
+    }
     /* Update header badge */
-    document.getElementById('aqiBadge').textContent = `${lv.emoji} AQI ${aqi} · ${lv.label}`;
+    const badge = document.getElementById('aqiBadge');
+    if (badge) badge.textContent = `${lv.emoji} AQI ${aqi} · ${lv.label}`;
   } catch(e) {
-    document.getElementById('aqiBadge').textContent = '🌫️ AQI unavailable';
+    const badge = document.getElementById('aqiBadge');
+    if (badge) badge.textContent = 'AQI unavailable';
   }
 }
 
@@ -614,10 +633,12 @@ async function fetchWeather() {
 
     /* Update topbar temperature chip */
     const chip = document.getElementById('tempChip');
-    chip.className = `temp-chip ${heatCls}`;
-    chip.title     = `Chennai · ${temp}°C (feels ${feels}°C) · Humidity ${humidity}% · ${desc}`;
-    document.getElementById('tempVal').textContent  = temp;
-    document.getElementById('tempDesc').textContent = descShort;
+    if (chip) {
+      chip.className = `temp-chip ${heatCls}`;
+      chip.title     = `${city().name} · ${temp}°C (feels ${feels}°C) · Humidity ${humidity}% · ${desc}`;
+      document.getElementById('tempVal').textContent  = temp;
+      document.getElementById('tempDesc').textContent = descShort;
+    }
 
     /* Update header badge */
     const badge = document.getElementById('tempBadge');
@@ -701,8 +722,27 @@ async function trySource(src) {
   return null;
 }
 
+function formatFuelRate(value, unit) {
+  const num = Number(value);
+  return Number.isFinite(num) ? `₹${num.toFixed(2)}/${unit}` : `₹--/${unit}`;
+}
+
+function updateWelcomeFuelRates(source='fallback') {
+  const setText = (id, value) => { const el = document.getElementById(id); if (el) el.textContent = value; };
+  setText('welcomePetrolRate', formatFuelRate(PRICES.petrol, 'L'));
+  setText('welcomeDieselRate', formatFuelRate(PRICES.diesel, 'L'));
+  setText('welcomeCngRate', formatFuelRate(PRICES.cng, 'kg'));
+  setText('welcomeElecRate', formatFuelRate(PRICES.electric, 'kWh'));
+  const label = source === 'live' ? 'Live today'
+    : source === 'cached' ? 'Cached today'
+    : source === 'loading' ? 'Fetching'
+    : 'Fallback';
+  setText('welcomeFuelSource', label);
+}
+
 function applyPrices(p, source) {
   PRICES = { ...DEFAULT_PRICES, ...p };
+  updateWelcomeFuelRates(source);
   /* Update price pills */
   document.getElementById('ppPetrol').textContent = `₹${PRICES.petrol.toFixed(2)}/L`;
   document.getElementById('ppDiesel').textContent = `₹${PRICES.diesel.toFixed(2)}/L`;
@@ -769,6 +809,8 @@ document.getElementById('refreshBtn').addEventListener('click', () => fetchLiveP
 
 let routeTimer, acTimers = {};
 let routeMap = null, routePolyline = null;
+let lastRouteGeometry = null;
+let impactRouteLayer = null;
 let pinFrom = null, pinTo = null;
 let coordFrom = null, coordTo = null;
 let routeMapReady = false;
@@ -839,6 +881,41 @@ function initRouteMap(){
 
   routeMap.invalidateSize();
 }
+
+function setRouteWorkspaceView(view='map') {
+  const nextView = view === 'live' ? 'live' : 'map';
+  document.querySelectorAll('.route-view-tab').forEach(btn => {
+    const active = btn.dataset.routeView === nextView;
+    btn.classList.toggle('active', active);
+    btn.setAttribute('aria-selected', active ? 'true' : 'false');
+  });
+  const mapWrap = document.getElementById('routeMapWrap');
+  const liveCard = document.getElementById('ltCard');
+  const hint = document.getElementById('routeMapHint');
+  if (mapWrap) {
+    mapWrap.hidden = nextView !== 'map';
+    mapWrap.classList.toggle('active', nextView === 'map');
+  }
+  if (liveCard) {
+    liveCard.hidden = nextView !== 'live';
+    liveCard.classList.toggle('open', nextView === 'live');
+  }
+  if (hint) hint.hidden = nextView !== 'map';
+  if (nextView === 'map') {
+    if (!routeMapReady) initRouteMap();
+    setTimeout(() => routeMap?.invalidateSize?.(), 80);
+  }
+}
+
+document.querySelectorAll('.route-view-tab').forEach(btn => {
+  btn.addEventListener('click', () => setRouteWorkspaceView(btn.dataset.routeView));
+});
+document.addEventListener('click', event => {
+  const btn = event.target?.closest?.('.route-view-tab[data-route-view]');
+  if (!btn) return;
+  event.preventDefault();
+  setRouteWorkspaceView(btn.dataset.routeView);
+});
 
 function updateMapHint(){
   const h = document.getElementById('routeMapHint');
@@ -1071,6 +1148,7 @@ function applyEffectiveDist(){
 
 function renderPolyline(geometry,color){
   if(!routeMap||!geometry) return;
+  lastRouteGeometry = geometry;
   if(routePolyline) routeMap.removeLayer(routePolyline);
   routePolyline=L.geoJSON(geometry,{style:{color,weight:4,opacity:.88,lineJoin:'round',lineCap:'round'}}).addTo(routeMap);
   routeMap.fitBounds(routePolyline.getBounds().pad(0.12));
@@ -1196,6 +1274,8 @@ document.addEventListener('click',e=>{ if(e.target.closest?.('.fp')) setTimeout(
     if(wh==='from'){ if(pinFrom){routeMap.removeLayer(pinFrom);pinFrom=null;} coordFrom=null; }
     else           { if(pinTo)  {routeMap.removeLayer(pinTo);  pinTo  =null;} coordTo  =null; }
     if(routePolyline){ routeMap.removeLayer(routePolyline); routePolyline=null; }
+    lastRouteGeometry = null;
+    clearImpactRouteLayer();
   });
 });
 
@@ -1232,7 +1312,8 @@ function bumpLocal() {
 
 function updateMonthStat() {
   const s=getStats(), mk=mkKey();
-  document.getElementById('statMonth').textContent = (s.monthly?.[mk]||0).toLocaleString();
+  const statMonth = document.getElementById('statMonth');
+  if (statMonth) statMonth.textContent = (s.monthly?.[mk]||0).toLocaleString();
   updateAdminStats();
 }
 
@@ -1247,8 +1328,11 @@ function renderTracker() {
   }
   const max=Math.max(...months.map(m=>m.count),1);
   const curKey=mkKey();
-  const chart=document.getElementById('monthChart'); chart.innerHTML='';
-  const lbls=document.getElementById('monthLbls');  lbls.innerHTML='';
+  const chart=document.getElementById('monthChart');
+  const lbls=document.getElementById('monthLbls');
+  if (!chart || !lbls) { updateAdminStats(); return; }
+  chart.innerHTML='';
+  lbls.innerHTML='';
   months.forEach(m=>{
     const pct=Math.max((m.count/max)*100, m.count>0?6:3);
     const isCur=m.key===curKey;
@@ -1259,8 +1343,10 @@ function renderTracker() {
     lbls.appendChild(lb);
   });
   const total=Object.values(monthly).reduce((a,b)=>a+b,0);
-  document.getElementById('totalLocal').textContent=total.toLocaleString();
-  if(s.firstSeen) document.getElementById('firstSeenLbl').textContent=`since ${new Date(s.firstSeen).toLocaleDateString('en-IN',{month:'short',year:'numeric'})}`;
+  const totalLocal = document.getElementById('totalLocal');
+  if (totalLocal) totalLocal.textContent=total.toLocaleString();
+  const firstSeenLbl = document.getElementById('firstSeenLbl');
+  if(s.firstSeen && firstSeenLbl) firstSeenLbl.textContent=`since ${new Date(s.firstSeen).toLocaleDateString('en-IN',{month:'short',year:'numeric'})}`;
   updateAdminStats();
 }
 
@@ -1296,6 +1382,8 @@ function resetRouteState() {
   if (routeMap && pinTo) { routeMap.removeLayer(pinTo); pinTo = null; }
   coordFrom = null;
   coordTo = null;
+  lastRouteGeometry = null;
+  clearImpactRouteLayer();
   distLinked = true;
 }
 
@@ -1310,7 +1398,7 @@ function resetCityVisionState() {
   const genCta = document.getElementById('genCta');
   if (genCta) genCta.style.display = 'none';
   const genText = document.getElementById('genBtnText');
-  if (genText) genText.textContent = 'Apply Smog Proxy';
+  if (genText) genText.textContent = 'Apply Impact Proxy';
   const genIcon = document.getElementById('genBtnIcon');
   if (genIcon) genIcon.textContent = '↻';
   const effect = document.getElementById('mapEffect');
@@ -1320,6 +1408,7 @@ function resetCityVisionState() {
     smogOverlay.style.background = 'transparent';
     smogOverlay.style.opacity = '0';
   }
+  clearImpactRouteLayer();
   const viFill = document.getElementById('viBarFill');
   if (viFill) viFill.style.width = '0%';
   const viText = document.getElementById('viIntensityText');
@@ -1331,42 +1420,114 @@ function resetCityVisionState() {
   if (viDetail) viDetail.textContent = '';
 }
 
-function resetAppToDefaults() {
-  try { localStorage.removeItem('taint_stats'); } catch {}
+function relocateCityVisionToAdmin() {
+  const card = document.getElementById('cityVisionCard');
+  const admin = document.getElementById('adminSection');
+  if (!card || !admin || card.parentElement === admin) return;
+  const anchor = admin.querySelector('.factor-card') || admin.firstElementChild;
+  if (anchor) admin.insertBefore(card, anchor);
+  else admin.appendChild(card);
+  card.classList.add('admin-city-vision-card');
+  const title = card.querySelector('.card-title');
+  if (title) title.textContent = 'Admin city vision - Satellite vs Environmental Impact Proxy';
+}
 
+function renderSignedOutCommuteState() {
+  const setText = (id, value) => { const el = document.getElementById(id); if (el) el.textContent = value; };
+  setText('totalCo2', '—');
+  setText('perPax', '—');
+  setText('trees', '—');
+  const badge = document.getElementById('fuelBadge');
+  if (badge) {
+    badge.className = 'fuel-badge';
+    badge.textContent = 'Sign in required';
+  }
+  const cmp = document.getElementById('cmpRow');
+  if (cmp) cmp.innerHTML = '';
+  const bar = document.getElementById('ratingBar');
+  if (bar) bar.style.width = '0%';
+  setText('ratingTxt', 'Sign in');
+  const tip = document.getElementById('tipText');
+  if (tip) tip.textContent = 'Sign in to calculate and save your carbon footprint.';
+  window._commuteResult = null;
+  resetCityVisionState();
+}
+
+function resetCommuteDefaults(options={}) {
   currentCat = 'two';
   currentFuel = 'petrol';
   currentHtype = 'mild';
-
   resetControlsToDefaults('#commuteSection');
-  resetControlsToDefaults('#workplaceSection');
-  resetControlsToDefaults('#homeSection');
-  resetControlsToDefaults('#taintSection');
   resetRouteState();
-
-  document.getElementById('distance').value = '10';
-  document.getElementById('passengers').value = '1';
-  document.getElementById('pucStatus').value = 'valid_clean';
-  document.getElementById('pucCo').value = '';
-  document.getElementById('pucSmoke').value = '';
-
+  const setValue = (id, value) => { const el = document.getElementById(id); if (el) el.value = value; };
+  setValue('distance', '10');
+  setValue('passengers', '1');
+  setValue('pucStatus', 'valid_clean');
+  setValue('pucCo', '');
+  setValue('pucSmoke', '');
   document.querySelectorAll('.cat-btn').forEach(btn =>
     btn.classList.toggle('active', btn.dataset.cat === currentCat));
   document.querySelectorAll('.hp-btn').forEach(btn =>
     btn.classList.toggle('active', btn.dataset.htype === currentHtype));
-
-  if (typeof setCity === 'function') setCity('chennai');
   if (typeof setDistLinked === 'function') setDistLinked(true);
-
   renderFuelPills(currentCat);
   populateVehicles();
   updatePucUI();
   resetCityVisionState();
+  if (!isSignedInUser()) renderSignedOutCommuteState();
+  if (options.notify !== false) notify('Commute defaults restored.', 'success', 'Reset');
+}
 
-  if (typeof calculateWorkplace === 'function') calculateWorkplace();
-  if (typeof calculateHome === 'function') calculateHome();
+function resetWorkplaceDefaults(options={}) {
+  resetControlsToDefaults('#workplaceSection');
+  wpUpdateSplitSum();
+  const result = document.getElementById('wpResultCard');
+  if (result) result.style.display = 'none';
+  window._wpResult = null;
+  if (typeof mtImportSavedModeResults === 'function') mtImportSavedModeResults({ silent:true });
+  if (options.notify !== false) notify('Workplace defaults restored.', 'success', 'Reset');
+}
+
+function resetHomeDefaults(options={}) {
+  resetControlsToDefaults('#homeSection');
+  const result = document.getElementById('hmResultCard');
+  if (result) result.style.display = 'none';
+  window._hmResult = null;
+  if (typeof mtImportSavedModeResults === 'function') mtImportSavedModeResults({ silent:true });
+  if (options.notify !== false) notify('Home defaults restored.', 'success', 'Reset');
+}
+
+function resetMyTaintDefaults(options={}) {
+  resetControlsToDefaults('#taintSection');
   mtSaved = {};
-  if (typeof mtRenderStep === 'function') { mtStep = 0; mtRenderStep(); }
+  mtStepDone = [false,false,false,false,false,false];
+  window._mtResult = null;
+  ['mtCommuteResult','mtWorkplaceResult','mtHomeResult'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) { el.textContent = ''; el.classList.remove('show'); }
+  });
+  const setText = (id, value) => { const el = document.getElementById(id); if (el) el.textContent = value; };
+  setText('mtTotalVal', '—');
+  setText('mtGrade', '—');
+  setText('mtBudgetScale', '');
+  const clearHtml = id => { const el = document.getElementById(id); if (el) el.innerHTML = ''; };
+  ['mtBreakdown','mtBenchmark','mtTipsList'].forEach(clearHtml);
+  ['mtBudgetBar','mtMarkerIndia','mtMarkerParis','mtMarkerYou'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.removeAttribute('style');
+  });
+  if (typeof mtShowStep === 'function') mtShowStep(0);
+  if (options.notify !== false) notify('My Taint defaults restored.', 'success', 'Reset');
+}
+
+function resetAppToDefaults() {
+  try { localStorage.removeItem('taint_stats'); } catch {}
+
+  if (typeof setCity === 'function') setCity('chennai');
+  resetCommuteDefaults({ notify:false });
+  resetWorkplaceDefaults({ notify:false });
+  resetHomeDefaults({ notify:false });
+  resetMyTaintDefaults({ notify:false });
 
   renderTracker();
   updateMonthStat();
@@ -1375,7 +1536,11 @@ function resetAppToDefaults() {
   notify('Defaults restored.', 'success', 'Reset');
 }
 
-document.getElementById('resetBtn').addEventListener('click', resetAppToDefaults);
+document.getElementById('resetBtn')?.addEventListener('click', resetAppToDefaults);
+document.getElementById('commuteResetBtn')?.addEventListener('click', resetCommuteDefaults);
+document.getElementById('wpResetBtn')?.addEventListener('click', resetWorkplaceDefaults);
+document.getElementById('hmResetBtn')?.addEventListener('click', resetHomeDefaults);
+document.getElementById('mtResetBtn')?.addEventListener('click', resetMyTaintDefaults);
 
 // ──────────────────────────────────────────────────────
 //  FIREBASE — global user & calculation counter
@@ -1434,16 +1599,17 @@ async function SB_AUTH_HEADERS() {
 }
 
 async function sbConnectionStatus() {
+  const serviceName = SUPABASE_CONFIG.isProduction ? 'Cloud data service' : 'Supabase';
   if (!SB_CONFIGURED()) {
-    return { ok:false, reason:'Supabase config missing. Fill supabase-config.js.' };
+    return { ok:false, reason:`${serviceName} config missing. Fill supabase-config.js.` };
   }
   try {
     const res = await appFetch(`${SUPABASE_CONFIG.url}/rest/v1/stats?select=key&limit=1`, {
       headers: await SB_AUTH_HEADERS()
-    }, { label:'Supabase connection', timeout:8000 });
-    return { ok:true, reason:'Supabase connected' };
+    }, { label:'data service connection', timeout:8000 });
+    return { ok:true, reason:`${serviceName} connected` };
   } catch (e) {
-    return { ok:false, reason:e.message || 'Supabase connection failed' };
+    return { ok:false, reason:e.message || `${serviceName} connection failed` };
   }
 }
 
@@ -1477,7 +1643,9 @@ const SB_SIGNED_IN_DATA_TABLES = new Set([
   'carbon_profiles',
   'product_clicks',
   'product_purchases',
-  'route_logs'
+  'process_runs',
+  'route_logs',
+  'user_calculation_items'
 ]);
 
 async function sbPost(table, payload, kind='functional') {
@@ -1606,6 +1774,26 @@ async function sbUploadJsonArtifact(title, payload, metadata={}) {
   });
 }
 
+async function sbUploadPdfArtifact(title, blob, metadata={}) {
+  if (!supabaseClient || !currentUser || currentUser.provider !== 'supabase' || !(blob instanceof Blob)) return null;
+  const safeTitle = String(title || 'carbon-report').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'carbon-report';
+  const objectPath = `${currentUser.id}/${Date.now()}-${safeTitle}.pdf`;
+  const { error } = await supabaseClient.storage
+    .from('taint-media')
+    .upload(objectPath, blob, { contentType:'application/pdf', upsert:false });
+  if (error) { console.warn('TAINT PDF artifact upload skipped:', error.message); return null; }
+  return sbPost('app_files', {
+    bucket_id    : 'taint-media',
+    object_path  : objectPath,
+    file_category: 'export',
+    mime_type    : 'application/pdf',
+    extension    : 'pdf',
+    size_bytes   : blob.size || null,
+    title,
+    metadata
+  });
+}
+
 async function sbStoreSensitiveData(recordType, payload, metadata={}) {
   if (!SB_CONFIGURED() || !currentUser || currentUser.provider !== 'supabase') return null;
   return enqueueWrite(async () => {
@@ -1644,6 +1832,7 @@ function sbStoreSensitiveProfile(user=currentUser) {
 }
 
 window.taintUploadJsonArtifact = sbUploadJsonArtifact;
+window.taintUploadPdfArtifact = sbUploadPdfArtifact;
 window.taintStoreSensitiveData = sbStoreSensitiveData;
 window.taintGetSensitiveData = sbGetSensitiveData;
 
@@ -1654,7 +1843,7 @@ const RECENT_MODE_CONFIG = {
     chartId:'commuteTrendChart',
     metaId:'commuteRecentMeta',
     table:'calculation_logs',
-    select:'created_at,city_name,category,fuel,vehicle,distance_km,passengers,per_passenger_kg,result,raw_input',
+    select:'id,created_at,city_name,category,fuel,vehicle,distance_km,passengers,per_passenger_kg,result,raw_input',
     query:'calculation_type=eq.commute',
     empty:'Sign in or calculate to see recent commute results.'
   },
@@ -1664,7 +1853,7 @@ const RECENT_MODE_CONFIG = {
     chartId:'workplaceTrendChart',
     metaId:'workplaceRecentMeta',
     table:'carbon_profiles',
-    select:'created_at,city_name,total_tco2e,per_capita_tco2e,grade,inputs,results',
+    select:'id,created_at,city_name,total_tco2e,per_capita_tco2e,grade,inputs,results',
     query:'profile_type=eq.workplace',
     empty:'Sign in or calculate to see recent workplace results.'
   },
@@ -1674,7 +1863,7 @@ const RECENT_MODE_CONFIG = {
     chartId:'homeTrendChart',
     metaId:'homeRecentMeta',
     table:'carbon_profiles',
-    select:'created_at,city_name,total_tco2e,per_capita_tco2e,grade,inputs,results',
+    select:'id,created_at,city_name,total_tco2e,per_capita_tco2e,grade,inputs,results',
     query:'profile_type=eq.household',
     empty:'Sign in or calculate to see recent home results.'
   },
@@ -1684,7 +1873,7 @@ const RECENT_MODE_CONFIG = {
     chartId:'taintTrendChart',
     metaId:'taintRecentMeta',
     table:'carbon_profiles',
-    select:'created_at,city_name,total_tco2e,per_capita_tco2e,grade,inputs,results',
+    select:'id,created_at,city_name,total_tco2e,per_capita_tco2e,grade,inputs,results',
     query:'profile_type=eq.my_taint',
     empty:'Sign in or calculate to see recent My Taint profiles.'
   },
@@ -1694,11 +1883,18 @@ const RECENT_MODE_CONFIG = {
     chartId:'buyTrendChart',
     metaId:'buyRecentMeta',
     table:'product_purchases',
-    select:'created_at,product_id,product_name,platform,status,price_num,quantity,city_name,metadata',
+    select:'id,created_at,product_id,product_name,platform,status,price_num,quantity,city_name,metadata',
     query:'status=in.(checked_out,bought)',
     empty:'Open a vendor link or mark a product bought to build your list.'
   }
 };
+const RECENT_LIMIT = 5;
+const RECENT_DB_TABLE = 'user_calculation_items';
+const recentUiCache = {};
+
+function isCloudRecentUser() {
+  return !!(SB_CONFIGURED() && currentUser && currentUser.provider === 'supabase');
+}
 
 function readLocalRecent(mode) {
   const cfg = RECENT_MODE_CONFIG[mode];
@@ -1710,7 +1906,308 @@ function readLocalRecent(mode) {
 function writeLocalRecent(mode, records) {
   const cfg = RECENT_MODE_CONFIG[mode];
   if (!cfg) return;
-  try { localStorage.setItem(cfg.localKey, JSON.stringify(records.slice(0, 25))); } catch {}
+  try { localStorage.setItem(cfg.localKey, JSON.stringify(records.slice(0, RECENT_LIMIT))); } catch {}
+}
+
+function pdfSafeText(value) {
+  return String(value ?? '')
+    .replace(/₹/g, 'Rs ')
+    .replace(/CO₂/g, 'CO2')
+    .replace(/CO₂e/g, 'CO2e')
+    .replace(/tCO₂e/g, 'tCO2e')
+    .replace(/kg CO₂/g, 'kg CO2')
+    .replace(/[–—]/g, '-')
+    .replace(/·/g, '|')
+    .replace(/°/g, ' deg ')
+    .normalize('NFKD')
+    .replace(/[^\x20-\x7E]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function pdfEscape(value) {
+  return pdfSafeText(value).replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
+}
+
+function wrapPdfLine(line, max=94) {
+  const text = pdfSafeText(line);
+  if (!text) return [''];
+  const words = text.split(' ');
+  const rows = [];
+  let current = '';
+  words.forEach(word => {
+    const next = current ? `${current} ${word}` : word;
+    if (next.length > max && current) {
+      rows.push(current);
+      current = word;
+    } else {
+      current = next;
+    }
+  });
+  if (current) rows.push(current);
+  return rows;
+}
+
+function buildPdfBlob(title, lines=[]) {
+  const reportLines = [
+    `Generated: ${new Date().toLocaleString('en-IN')}`,
+    '',
+    ...lines
+  ].flatMap(line => wrapPdfLine(line));
+  const pageSize = 38;
+  const pages = [];
+  for (let i = 0; i < reportLines.length; i += pageSize) pages.push(reportLines.slice(i, i + pageSize));
+  if (!pages.length) pages.push(['Report generated.']);
+
+  const objects = [];
+  const pageRefs = pages.map((_, i) => `${5 + i * 2} 0 R`).join(' ');
+  objects[1] = `<< /Type /Catalog /Pages 2 0 R >>`;
+  objects[2] = `<< /Type /Pages /Kids [${pageRefs}] /Count ${pages.length} >>`;
+  objects[3] = `<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>`;
+  objects[4] = `<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>`;
+  pages.forEach((pageLines, i) => {
+    const pageNo = 5 + i * 2;
+    const contentNo = pageNo + 1;
+    const stream = [
+      '0.03 0.05 0.06 rg',
+      '0 742 612 50 re f',
+      '0.13 0.82 0.68 rg',
+      '32 758 22 22 re f',
+      '1 1 1 rg',
+      'BT',
+      '/F2 18 Tf',
+      '64 765 Td',
+      '(TAINT) Tj',
+      'ET',
+      '0.70 0.76 0.82 rg',
+      'BT',
+      '/F1 9 Tf',
+      '64 752 Td',
+      '(Carbon footprint report) Tj',
+      'ET',
+      '0.20 0.83 0.60 rg',
+      '32 735 548 1.5 re f',
+      '0.06 0.08 0.10 rg',
+      'BT',
+      '/F2 13 Tf',
+      '50 716 Td',
+      `(${pdfEscape(title)}) Tj`,
+      'ET',
+      '0.08 0.10 0.12 rg',
+      'BT',
+      '/F1 11 Tf',
+      '50 696 Td',
+      '14 TL',
+      ...pageLines.map(line => `(${pdfEscape(line)}) Tj T*`),
+      'ET',
+      '0.45 0.50 0.56 rg',
+      'BT',
+      '/F1 8 Tf',
+      '50 36 Td',
+      `(${pdfEscape(`TAINT calculation report | Page ${i + 1} of ${pages.length}`)}) Tj`,
+      'ET'
+    ].join('\n');
+    objects[pageNo] = `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents ${contentNo} 0 R >>`;
+    objects[contentNo] = `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`;
+  });
+
+  let pdf = '%PDF-1.4\n';
+  const offsets = [0];
+  for (let i = 1; i < objects.length; i++) {
+    offsets[i] = pdf.length;
+    pdf += `${i} 0 obj\n${objects[i]}\nendobj\n`;
+  }
+  const xrefAt = pdf.length;
+  pdf += `xref\n0 ${objects.length}\n0000000000 65535 f \n`;
+  for (let i = 1; i < objects.length; i++) pdf += `${String(offsets[i]).padStart(10, '0')} 00000 n \n`;
+  pdf += `trailer\n<< /Size ${objects.length} /Root 1 0 R >>\nstartxref\n${xrefAt}\n%%EOF`;
+  return new Blob([pdf], { type:'application/pdf' });
+}
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+let activePdfUrl = '';
+let activePdfBlob = null;
+let activePdfFilename = 'taint-calculation.pdf';
+
+function buildReportHtml(title, lines=[], { mode='', record=null }={}) {
+  const logoUrl = new URL('assets/logo1.png', location.href).href;
+  const generated = new Date().toLocaleString('en-IN');
+  const cleanLines = lines.map(line => String(line ?? '').trim()).filter(Boolean);
+  const metricRows = cleanLines
+    .filter(line => line.includes(':'))
+    .slice(0, 10)
+    .map(line => {
+      const idx = line.indexOf(':');
+      return { key: line.slice(0, idx), value: line.slice(idx + 1).trim() };
+    });
+  const bodyLines = cleanLines.map(line => `<li>${escapeHTML(line)}</li>`).join('');
+  const metrics = metricRows.map(row => `
+    <div class="report-metric">
+      <span>${escapeHTML(row.key)}</span>
+      <b>${escapeHTML(row.value)}</b>
+    </div>`).join('');
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${escapeHTML(title)}</title>
+<style>
+  :root{color-scheme:dark light;font-family:Inter,Arial,sans-serif;background:#0b1110;color:#eef7f3}
+  body{margin:0;background:#0b1110;color:#eef7f3}
+  .report{max-width:920px;margin:0 auto;padding:28px}
+  .head{display:flex;align-items:center;gap:16px;border-bottom:2px solid #21d19f;padding-bottom:18px;margin-bottom:18px}
+  .logo{width:58px;height:58px;object-fit:contain;border-radius:12px;background:#050807;border:1px solid rgba(33,209,159,.35);padding:5px}
+  h1{font-size:22px;line-height:1.25;margin:0;color:#fff}
+  .meta{font-size:12px;color:#9aa7a2;margin-top:5px}
+  .summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin:18px 0}
+  .report-metric{border:1px solid rgba(148,163,184,.22);background:rgba(255,255,255,.04);border-radius:8px;padding:12px}
+  .report-metric span{display:block;font-size:11px;color:#95a3a0;text-transform:uppercase;font-weight:800}
+  .report-metric b{display:block;margin-top:5px;font-size:15px;color:#35e2ad;word-break:break-word}
+  .section{border:1px solid rgba(148,163,184,.22);border-radius:8px;background:#101816;padding:14px;margin-top:14px}
+  .section h2{font-size:14px;margin:0 0 10px;color:#e9fff8}
+  ul{margin:0;padding-left:18px;color:#dce7e3;font-size:13px;line-height:1.65}
+  li::marker{color:#35e2ad}
+  .foot{margin-top:18px;font-size:11px;color:#899690}
+</style>
+</head>
+<body>
+  <main class="report">
+    <header class="head">
+      <img class="logo" src="${logoUrl}" alt="TAINT logo">
+      <div>
+        <h1>${escapeHTML(title)}</h1>
+        <div class="meta">Generated ${escapeHTML(generated)}${mode ? ` · ${escapeHTML(mode)}` : ''}${record?.id ? ` · record ${escapeHTML(record.id)}` : ''}</div>
+      </div>
+    </header>
+    ${metrics ? `<section class="summary">${metrics}</section>` : ''}
+    <section class="section">
+      <h2>Calculation details</h2>
+      <ul>${bodyLines || '<li>Report generated.</li>'}</ul>
+    </section>
+    <div class="foot">TAINT carbon-footprint estimates are calculated reports, not measured AQI or literal pollution predictions.</div>
+  </main>
+</body>
+</html>`;
+}
+
+function closePdfViewer() {
+  const viewer = document.getElementById('pdfViewer');
+  const frame = document.getElementById('pdfViewerFrame');
+  if (frame) { frame.src = 'about:blank'; frame.removeAttribute('srcdoc'); }
+  if (viewer) viewer.classList.add('hidden');
+  if (activePdfUrl) {
+    URL.revokeObjectURL(activePdfUrl);
+    activePdfUrl = '';
+  }
+  activePdfBlob = null;
+}
+
+function openPdfBlob(blob, title='TAINT PDF report') {
+  const viewer = document.getElementById('pdfViewer');
+  const frame = document.getElementById('pdfViewerFrame');
+  const titleEl = document.getElementById('pdfViewerTitle');
+  if (viewer && frame) {
+    closePdfViewer();
+    activePdfUrl = URL.createObjectURL(blob);
+    frame.src = activePdfUrl;
+    if (titleEl) titleEl.textContent = title;
+    viewer.classList.remove('hidden');
+    return;
+  }
+  const url = URL.createObjectURL(blob);
+  const opened = window.open(url, '_blank', 'noopener');
+  if (!opened) downloadBlob(blob, 'taint-calculation.pdf');
+  setTimeout(() => URL.revokeObjectURL(url), 15000);
+}
+
+function openReportHtml(html, title='TAINT PDF report', pdfBlob=null, filename='taint-calculation.pdf') {
+  const viewer = document.getElementById('pdfViewer');
+  const frame = document.getElementById('pdfViewerFrame');
+  const titleEl = document.getElementById('pdfViewerTitle');
+  if (!viewer || !frame) {
+    if (pdfBlob) openPdfBlob(pdfBlob, title);
+    return;
+  }
+  closePdfViewer();
+  frame.srcdoc = html;
+  activePdfBlob = pdfBlob;
+  activePdfFilename = filename;
+  if (titleEl) titleEl.textContent = title;
+  viewer.classList.remove('hidden');
+}
+
+async function exportPdfReport(mode, title, lines, { filename='', open=false, record=null }={}) {
+  if (!requireSignedInForAction('calculate')) return null;
+  const blob = buildPdfBlob(title, lines);
+  const safeName = (filename || `${mode}-carbon-report.pdf`).replace(/[^\w.-]+/g, '_');
+  const html = buildReportHtml(title, lines, { mode, record });
+  const cfg = RECENT_MODE_CONFIG[mode] || {};
+  const artifact = await sbUploadPdfArtifact(title, blob, {
+    mode,
+    cityKey: currentCityKey,
+    cityName: city().name,
+    recentId: record?.id || null,
+    sourceTable: record?.payload?.sourceRowId ? (record?.payload?.sourceTable || cfg.table || null) : (record?.payload?.savedItemId ? RECENT_DB_TABLE : (cfg.table || null)),
+    sourceRowId: record?.payload?.sourceRowId || record?.payload?.savedItemId || record?.payload?.id || record?.id || null,
+    sourceLocalKey: cfg.localKey || null,
+    pdfTemplate: 'taint-branded-v2',
+    htmlTemplate: 'taint-html-report-v1',
+    source: open ? 'recent_calculation_view' : 'calculation_export'
+  });
+  if (open) openReportHtml(html, title, blob, safeName.endsWith('.pdf') ? safeName : `${safeName}.pdf`);
+  else downloadBlob(blob, safeName.endsWith('.pdf') ? safeName : `${safeName}.pdf`);
+  notify(artifact ? 'PDF ready and saved to your account files.' : 'PDF ready. Account file upload was skipped or unavailable.', artifact ? 'success' : 'warn', 'PDF export');
+  return { blob, artifact };
+}
+
+function genericRecentPdfLines(mode, record) {
+  const payload = record?.payload || {};
+  const lines = [
+    `Mode: ${mode}`,
+    `User: ${currentUser?.email || currentUser?.name || 'signed in user'}`,
+    `City: ${record?.city || city().name}`,
+    `Saved at: ${record?.at ? new Date(record.at).toLocaleString('en-IN') : new Date().toLocaleString('en-IN')}`,
+    `Title: ${record?.title || 'Carbon calculation'}`,
+    record?.detail ? `Detail: ${record.detail}` : '',
+    `Result: ${Number(record?.value || 0).toFixed(mode === 'buy' ? 0 : 3)} ${record?.unit || ''}`,
+    record?.grade ? `Grade: ${record.grade}` : '',
+    '',
+    'Stored calculation payload',
+    ...Object.entries(payload).slice(0, 28).map(([key, value]) => {
+      const rendered = typeof value === 'object' && value !== null ? JSON.stringify(value).slice(0, 180) : String(value ?? '');
+      return `${key}: ${rendered}`;
+    })
+  ].filter(Boolean);
+  lines.push('');
+  lines.push('Scientific note: this report uses TAINT calculated carbon-footprint estimates and should not be read as measured AQI or a literal smog prediction.');
+  return lines;
+}
+
+function commutePdfLines(result=window._commuteResult || {}) {
+  return [
+    `City: ${city().name} (${city().state})`,
+    `Vehicle: ${result.vehicleLabel || result.vehicle || 'Commute vehicle'}`,
+    `Mode/fuel: ${result.mode || currentCat} / ${FUEL_META[result.fuel || currentFuel]?.label || result.fuel || currentFuel}`,
+    `Distance: ${Number(result.distanceKm || 0).toFixed(1)} km one-way`,
+    `Passengers: ${result.passengers || 1}`,
+    `Per trip per passenger: ${Number(result.perTripKg || 0).toFixed(3)} kg CO2`,
+    `Total vehicle trip: ${Number(result.totalTripKg || 0).toFixed(3)} kg CO2`,
+    `Annual estimate: ${Number(result.annualTco2e || result.t || 0).toFixed(3)} t CO2e/year`,
+    `Trees to offset: ${Number(result.trees || 0).toFixed(3)} trees x 1 year`,
+    `PUC adjustment: ${result.puc?.label || result.puc?.status || 'not applied'}`,
+    `Grid intensity used: ${city().grid} kg CO2/kWh (${city().state}, CEA 2023)`,
+    '',
+    'Scientific note: commute impact is a personal annualized estimate; City Vision is a relative environmental impact proxy, not measured AQI.'
+  ];
 }
 
 function recentRecord(mode, record) {
@@ -1729,11 +2226,164 @@ function recentRecord(mode, record) {
   };
 }
 
+function recentDbMapping(mode, record) {
+  const cfg = RECENT_MODE_CONFIG[mode] || {};
+  const payload = record?.payload || {};
+  const hasSourceRow = !!payload.sourceRowId;
+  const rowId = hasSourceRow ? payload.sourceRowId : (payload.savedItemId || record?.id || 'local-only');
+  const table = hasSourceRow
+    ? (payload.sourceTable || cfg.table || RECENT_DB_TABLE)
+    : (isCloudRecentUser() ? RECENT_DB_TABLE : (cfg.table || 'local_storage'));
+  return `${table}.${rowId} -> app_files PDF metadata.sourceRowId`;
+}
+
+function uuidOrNull(value) {
+  const text = String(value || '');
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(text) ? text : null;
+}
+
+function dbRowToRecent(row) {
+  return recentRecord(row.mode || 'commute', {
+    id: row.id,
+    at: row.updated_at || row.created_at,
+    city: row.city_name,
+    title: row.title,
+    detail: row.detail || '',
+    value: Number(row.value || 0),
+    unit: row.unit || 't/yr',
+    grade: row.grade || '',
+    payload: {
+      ...(row.payload || {}),
+      id: row.source_row_id || row.payload?.id || row.id,
+      savedItemId: row.id,
+      sourceTable: row.source_table || null,
+      sourceRowId: row.source_row_id || null
+    }
+  });
+}
+
+function recentSourcePayload(mode, row) {
+  const cfg = RECENT_MODE_CONFIG[mode] || {};
+  const payload = row.payload || {};
+  const sourceTable = payload.sourceTable || cfg.table || null;
+  const sourceRowId = uuidOrNull(payload.id || payload.sourceRowId || row.sourceRowId);
+  return {
+    device_id   : getOrCreateUID(),
+    auth_user_id: currentUser.id,
+    mode,
+    city_name   : row.city || city().name,
+    title       : row.title || mode,
+    detail      : row.detail || null,
+    value       : Number(row.value || 0),
+    unit        : row.unit || 't/yr',
+    grade       : row.grade || null,
+    source_table: sourceTable,
+    source_row_id: sourceRowId,
+    payload     : payload
+  };
+}
+
+async function sbFetchRecentItems(mode, limit=RECENT_LIMIT) {
+  if (!isCloudRecentUser()) return null;
+  const query = [
+    `mode=eq.${encodeURIComponent(mode)}`,
+    `auth_user_id=eq.${encodeURIComponent(currentUser.id)}`,
+    'select=id,created_at,updated_at,mode,city_name,title,detail,value,unit,grade,source_table,source_row_id,payload',
+    'order=updated_at.desc',
+    `limit=${limit}`
+  ].join('&');
+  const res = await appFetch(`${SUPABASE_CONFIG.url}/rest/v1/${RECENT_DB_TABLE}?${query}`, {
+    headers: await SB_AUTH_HEADERS()
+  }, { label:`${mode} saved items`, timeout:9000, retries:1 });
+  const rows = await res.json();
+  return Array.isArray(rows) ? rows.map(dbRowToRecent) : [];
+}
+
+async function sbSaveRecentItem(mode, row) {
+  if (!isCloudRecentUser()) return null;
+  const existing = await sbFetchRecentItems(mode, RECENT_LIMIT + 1).catch(() => null);
+  const alreadySaved = existing?.some(item => String(item.id) === String(row.id));
+  if (!alreadySaved && existing && existing.length >= RECENT_LIMIT) {
+    notify(`Latest ${RECENT_LIMIT} saved calculations are full. Delete an older calculation before saving another.`, 'warn', 'Recent calculations');
+    return null;
+  }
+  const res = await appFetch(`${SUPABASE_CONFIG.url}/rest/v1/${RECENT_DB_TABLE}`, {
+    method:'POST',
+    headers:{ ...(await SB_AUTH_HEADERS()), 'Prefer':'return=representation' },
+    body:JSON.stringify(recentSourcePayload(mode, row))
+  }, { label:`${mode} saved item insert`, timeout:9000, retries:1 });
+  const data = await res.json().catch(() => []);
+  const saved = Array.isArray(data) ? data[0] : data;
+  return saved ? dbRowToRecent(saved) : null;
+}
+
+async function sbPatchRecentItem(mode, id, patch) {
+  if (!isCloudRecentUser()) return null;
+  const safeId = uuidOrNull(id);
+  if (!safeId) return null;
+  const res = await appFetch(`${SUPABASE_CONFIG.url}/rest/v1/${RECENT_DB_TABLE}?id=eq.${encodeURIComponent(safeId)}&auth_user_id=eq.${encodeURIComponent(currentUser.id)}`, {
+    method:'PATCH',
+    headers:{ ...(await SB_AUTH_HEADERS()), 'Prefer':'return=representation' },
+    body:JSON.stringify(patch)
+  }, { label:`${mode} saved item update`, timeout:9000, retries:1 });
+  const data = await res.json().catch(() => []);
+  const saved = Array.isArray(data) ? data[0] : data;
+  return saved ? dbRowToRecent(saved) : null;
+}
+
+async function sbDeleteRecentItem(mode, id) {
+  if (!isCloudRecentUser()) return false;
+  const safeId = uuidOrNull(id);
+  if (!safeId) return false;
+  await appFetch(`${SUPABASE_CONFIG.url}/rest/v1/${RECENT_DB_TABLE}?id=eq.${encodeURIComponent(safeId)}&auth_user_id=eq.${encodeURIComponent(currentUser.id)}`, {
+    method:'DELETE',
+    headers: await SB_AUTH_HEADERS()
+  }, { label:`${mode} saved item delete`, timeout:9000, retries:1 });
+  return true;
+}
+
+async function sbClearRecentItems(mode) {
+  if (!isCloudRecentUser()) return false;
+  await appFetch(`${SUPABASE_CONFIG.url}/rest/v1/${RECENT_DB_TABLE}?mode=eq.${encodeURIComponent(mode)}&auth_user_id=eq.${encodeURIComponent(currentUser.id)}`, {
+    method:'DELETE',
+    headers: await SB_AUTH_HEADERS()
+  }, { label:`${mode} saved items clear`, timeout:9000, retries:1 });
+  return true;
+}
+
+function canSaveRecentRecord(mode, id=null) {
+  if (!isSignedInUser()) return true;
+  const records = isCloudRecentUser() ? (recentUiCache[mode] || []) : readLocalRecent(mode);
+  const alreadySaved = id !== null && records.some(item => String(item.id) === String(id));
+  if (!alreadySaved && records.length >= RECENT_LIMIT) {
+    notify(`Latest ${RECENT_LIMIT} saved calculations are full. Delete an older calculation before saving another.`, 'warn', 'Recent calculations');
+    renderRecentCalculations(mode);
+    return false;
+  }
+  return true;
+}
+
 function saveRecentRecord(mode, record) {
   const row = recentRecord(mode, record);
+  if (isCloudRecentUser()) {
+    sbSaveRecentItem(mode, row)
+      .then(saved => {
+        if (!saved) return;
+        recentUiCache[mode] = [saved, ...(recentUiCache[mode] || []).filter(item => String(item.id) !== String(saved.id))].slice(0, RECENT_LIMIT);
+        renderRecentCalculations(mode, recentUiCache[mode]);
+      })
+      .catch(error => {
+        console.warn('TAINT DB saved item fallback:', error.message);
+        writeLocalRecent(mode, [row, ...readLocalRecent(mode).filter(item => item.id !== row.id)]);
+        renderRecentCalculations(mode);
+      });
+    return row;
+  }
   const existing = readLocalRecent(mode).filter(item => item.id !== row.id);
+  if (!canSaveRecentRecord(mode, row.id)) return null;
   writeLocalRecent(mode, [row, ...existing]);
   renderRecentCalculations(mode);
+  return row;
 }
 
 function rowToRecent(mode, row) {
@@ -1780,10 +2430,23 @@ function rowToRecent(mode, row) {
 async function fetchRecentRemote(mode) {
   const cfg = RECENT_MODE_CONFIG[mode];
   if (!cfg || !SB_CONFIGURED() || !currentUser || currentUser.provider !== 'supabase') return null;
-  const url = `${SUPABASE_CONFIG.url}/rest/v1/${cfg.table}?${cfg.query}&select=${encodeURIComponent(cfg.select)}&order=created_at.desc&limit=5`;
+  try {
+    const savedItems = await sbFetchRecentItems(mode);
+    if (savedItems) return savedItems;
+  } catch (error) {
+    console.warn(`TAINT ${mode} saved item table unavailable, falling back to source table:`, error.message);
+  }
+  const userFilter = `auth_user_id=eq.${encodeURIComponent(currentUser.id)}`;
+  const url = `${SUPABASE_CONFIG.url}/rest/v1/${cfg.table}?${cfg.query}&${userFilter}&select=${encodeURIComponent(cfg.select)}&order=created_at.desc&limit=5`;
   const res = await appFetch(url, { headers: await SB_AUTH_HEADERS() }, { label:`${mode} history`, timeout:9000, retries:1 });
   const rows = await res.json();
   return Array.isArray(rows) ? rows.map(row => rowToRecent(mode, row)) : [];
+}
+
+function formatRecentValue(record, mode) {
+  const value = Number(record?.value || 0);
+  if (record?.unit === 'INR' || mode === 'buy') return `INR ${value.toLocaleString('en-IN', { maximumFractionDigits:0 })}`;
+  return `${value.toFixed(2)} ${record?.unit || 't/yr'}`;
 }
 
 function trendSvg(records, mode) {
@@ -1801,15 +2464,47 @@ function trendSvg(records, mode) {
   const poly = points.map(([x,y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
   const area = `${pad},${height-pad} ${poly} ${width-pad},${height-pad}`;
   const unit = mode === 'buy' ? 'INR' : 't';
-  return `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Stored ${mode} trend">
+  const latest = Number(records[0]?.value || 0);
+  const oldest = Number(records[records.length - 1]?.value || 0);
+  const delta = latest - oldest;
+  const deltaText = mode === 'buy'
+    ? `INR ${Math.abs(delta).toLocaleString('en-IN', { maximumFractionDigits:0 })}`
+    : `${Math.abs(delta).toFixed(2)} ${unit}`;
+  const deltaClass = delta > 0 ? 'up' : delta < 0 ? 'down' : 'flat';
+  const grid = [0.25,0.5,0.75].map(frac => {
+    const y = pad + (height - pad * 2) * frac;
+    return `<line class="trend-grid" x1="${pad}" y1="${y.toFixed(1)}" x2="${width-pad}" y2="${y.toFixed(1)}"></line>`;
+  }).join('');
+  const pointItems = points.map(([, , v], i) => {
+    const value = mode === 'buy' ? Math.round(v).toLocaleString('en-IN') : v.toFixed(2);
+    return `<span>P${i + 1}: x=${i + 1}, y=${value} ${unit}</span>`;
+  }).join('');
+  return `<div class="trend-wrap">
+  <div class="trend-summary">
+    <span>Latest <b>${escapeHTML(formatRecentValue(records[0], mode))}</b></span>
+    <span class="${deltaClass}">${delta === 0 ? 'No change' : `${delta > 0 ? 'Up' : 'Down'} ${escapeHTML(deltaText)}`}</span>
+  </div>
+  <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Stored ${mode} trend">
+    ${grid}
     <line class="trend-axis" x1="${pad}" y1="${height-pad}" x2="${width-pad}" y2="${height-pad}"></line>
     <line class="trend-axis" x1="${pad}" y1="${pad}" x2="${pad}" y2="${height-pad}"></line>
     <polygon class="trend-area" points="${area}"></polygon>
     <polyline class="trend-line" points="${poly}"></polyline>
-    ${points.map(([x,y]) => `<circle class="trend-dot" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="4"></circle>`).join('')}
+    ${points.map(([x,y,v], i) => {
+      const labelY = Math.max(24, y - 8);
+      const labelX = Math.min(width - 74, Math.max(pad + 2, x - 22));
+      const value = mode === 'buy' ? Math.round(v).toLocaleString('en-IN') : v.toFixed(2);
+      return `<g>
+        <circle class="trend-dot" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="4"><title>x=${i + 1}, y=${value} ${unit}</title></circle>
+        <text class="trend-point-label" x="${labelX.toFixed(1)}" y="${labelY.toFixed(1)}">x${i + 1} y${value}</text>
+      </g>`;
+    }).join('')}
     <text class="trend-label" x="${pad}" y="12">${max.toFixed(mode === 'buy' ? 0 : 2)} ${unit}</text>
-    <text class="trend-label" x="${pad}" y="${height-2}">${records.length} saved</text>
-  </svg>`;
+    <text class="trend-label" x="${pad}" y="${height-2}">x: oldest to latest</text>
+    <text class="trend-label" x="${width-88}" y="${height-2}">y: value</text>
+  </svg>
+  <div class="trend-points">${pointItems}</div>
+  </div>`;
 }
 
 function renderRecentCalculations(mode, incoming=null) {
@@ -1818,25 +2513,175 @@ function renderRecentCalculations(mode, incoming=null) {
   const chart = cfg && document.getElementById(cfg.chartId);
   const meta = cfg && document.getElementById(cfg.metaId);
   if (!cfg || !list || !chart) return;
-  const records = (incoming || readLocalRecent(mode)).slice(0, 5);
-  if (meta) meta.textContent = currentUser?.provider === 'supabase' ? 'signed-in latest 5' : 'local latest 5';
+  const signedIn = isSignedInUser();
+  const cloudUser = isCloudRecentUser();
+  const records = signedIn
+    ? (incoming || (cloudUser ? (recentUiCache[mode] || []) : readLocalRecent(mode))).slice(0, RECENT_LIMIT)
+    : [];
+  if (incoming) recentUiCache[mode] = records;
+  if (meta) {
+    const name = signedIn ? displayNameForGreeting(currentUser) : 'sign in';
+    meta.textContent = signedIn ? `${name} latest 5${cloudUser ? ' DB' : ''}` : 'sign in required';
+  }
   if (!records.length) {
-    list.innerHTML = `<div class="recent-empty">${cfg.empty}</div>`;
+    const emptyText = signedIn
+      ? (cloudUser ? 'No DB-saved calculations yet. Calculate once to save your latest 5 to your account.' : cfg.empty)
+      : 'Sign in to view your latest 5 saved calculations and PDF reports.';
+    list.innerHTML = `<div class="recent-empty">${emptyText}</div>`;
     chart.textContent = 'No trend yet';
     return;
   }
-  list.innerHTML = records.map(r => {
+  const toolbar = `<div class="recent-toolbar">
+    <span>${records.length}/${RECENT_LIMIT} slots used</span>
+    <div class="recent-toolbar-actions">
+      <button class="recent-action-btn" type="button" data-recent-action="refresh" data-recent-mode="${escapeHTML(mode)}">Refresh</button>
+      <button class="recent-action-btn danger" type="button" data-recent-action="clear" data-recent-mode="${escapeHTML(mode)}">Clear all</button>
+    </div>
+  </div>`;
+  list.innerHTML = toolbar + records.map((r, idx) => {
     const date = new Date(r.at).toLocaleString('en-IN', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' });
-    const value = r.unit === 'INR' ? `₹${Number(r.value || 0).toLocaleString('en-IN')}` : `${Number(r.value || 0).toFixed(2)} ${escapeHTML(r.unit)}`;
+    const value = formatRecentValue(r, mode);
+    const mapping = recentDbMapping(mode, r);
     return `<div class="recent-row">
       <div>
-        <div class="recent-title">${escapeHTML(r.title)}</div>
+        <div class="recent-title-line"><span class="recent-rank">#${idx + 1}</span><div class="recent-title">${escapeHTML(r.title)}</div></div>
         <div class="recent-detail">${escapeHTML(r.city || '')} · ${escapeHTML(date)}${r.detail ? ` · ${escapeHTML(r.detail)}` : ''}</div>
+        <div class="recent-mapping">${escapeHTML(mapping)}</div>
       </div>
-      <div class="recent-value">${value}</div>
+      <div class="recent-actions">
+        <div class="recent-value">${escapeHTML(value)}</div>
+        <div class="recent-action-row">
+          <button class="recent-action-btn" type="button" data-recent-action="save" data-recent-mode="${escapeHTML(mode)}" data-recent-id="${escapeHTML(String(r.id))}">Save</button>
+          <button class="recent-action-btn" type="button" data-recent-action="edit" data-recent-mode="${escapeHTML(mode)}" data-recent-id="${escapeHTML(String(r.id))}">Edit</button>
+          <button class="recent-action-btn danger" type="button" data-recent-action="delete" data-recent-mode="${escapeHTML(mode)}" data-recent-id="${escapeHTML(String(r.id))}">Delete</button>
+          <button class="recent-action-btn recent-pdf-btn" type="button" data-recent-action="pdf" data-recent-mode="${escapeHTML(mode)}" data-recent-id="${escapeHTML(String(r.id))}">View PDF</button>
+        </div>
+      </div>
     </div>`;
   }).join('');
   chart.innerHTML = trendSvg(records, mode);
+}
+
+async function exportRecentPdf(mode, id) {
+  const record = readLocalRecent(mode).find(item => String(item.id) === String(id));
+  if (!record) {
+    notify('Saved calculation was not found in this session. Refresh the recent list and try again.', 'warn', 'PDF export');
+    return null;
+  }
+  const title = `${record.title || mode} - TAINT calculation report`;
+  return exportPdfReport(mode, title, genericRecentPdfLines(mode, record), {
+    filename:`${mode}_${String(record.id).replace(/[^\w.-]+/g, '_')}.pdf`,
+    open:true,
+    record
+  });
+}
+
+function recentRecordById(mode, id) {
+  return (recentUiCache[mode] || []).find(item => String(item.id) === String(id))
+    || readLocalRecent(mode).find(item => String(item.id) === String(id))
+    || null;
+}
+
+async function deleteRecentRecord(mode, id) {
+  if (isCloudRecentUser()) {
+    const ok = await sbDeleteRecentItem(mode, id);
+    if (!ok) throw new Error('Saved DB item was not found or cannot be deleted.');
+    recentUiCache[mode] = (recentUiCache[mode] || []).filter(item => String(item.id) !== String(id));
+    renderRecentCalculations(mode, recentUiCache[mode]);
+    await refreshRecentCalculations(mode);
+    notify('Saved calculation deleted from your account.', 'success', 'Recent calculations');
+    return;
+  }
+  const records = readLocalRecent(mode);
+  const next = records.filter(item => String(item.id) !== String(id));
+  if (next.length === records.length) {
+    notify('Saved calculation was not found.', 'warn', 'Recent calculations');
+    return;
+  }
+  writeLocalRecent(mode, next);
+  renderRecentCalculations(mode);
+  notify('Saved calculation deleted. You can save another calculation now.', 'success', 'Recent calculations');
+}
+
+async function editRecentRecord(mode, id) {
+  const records = readLocalRecent(mode);
+  const current = recentRecordById(mode, id);
+  const idx = records.findIndex(item => String(item.id) === String(id));
+  if (!current) {
+    notify('Saved calculation was not found.', 'warn', 'Recent calculations');
+    return;
+  }
+  const nextTitle = window.prompt('Edit calculation title', current.title || '');
+  if (nextTitle === null) return;
+  const nextDetail = window.prompt('Edit calculation note', current.detail || '');
+  if (nextDetail === null) return;
+  const patch = {
+    title: nextTitle.trim() || current.title,
+    detail: nextDetail.trim() || null
+  };
+  if (isCloudRecentUser()) {
+    const saved = await sbPatchRecentItem(mode, id, patch);
+    if (!saved) throw new Error('Saved DB item was not updated.');
+    recentUiCache[mode] = (recentUiCache[mode] || []).map(item => String(item.id) === String(id) ? saved : item);
+    renderRecentCalculations(mode, recentUiCache[mode]);
+    notify('Saved calculation updated in your account.', 'success', 'Recent calculations');
+    return;
+  }
+  if (idx < 0) {
+    notify('Saved calculation was not found.', 'warn', 'Recent calculations');
+    return;
+  }
+  records[idx] = {
+    ...current,
+    title: patch.title,
+    detail: patch.detail || '',
+    editedAt: new Date().toISOString()
+  };
+  writeLocalRecent(mode, records);
+  renderRecentCalculations(mode);
+  notify('Saved calculation updated.', 'success', 'Recent calculations');
+}
+
+async function resaveRecentRecord(mode, id) {
+  const record = recentRecordById(mode, id);
+  if (!record) {
+    notify('Saved calculation was not found.', 'warn', 'Recent calculations');
+    return;
+  }
+  if (isCloudRecentUser()) {
+    const saved = await sbPatchRecentItem(mode, id, {
+      title: record.title,
+      detail: record.detail || null,
+      value: Number(record.value || 0),
+      unit: record.unit || 't/yr',
+      grade: record.grade || null,
+      payload: record.payload || {}
+    });
+    if (!saved) throw new Error('Saved DB item was not refreshed.');
+    recentUiCache[mode] = [saved, ...(recentUiCache[mode] || []).filter(item => String(item.id) !== String(id))].slice(0, RECENT_LIMIT);
+    renderRecentCalculations(mode, recentUiCache[mode]);
+    notify(`Calculation saved to your DB latest ${RECENT_LIMIT}.`, 'success', 'Recent calculations');
+    return;
+  }
+  saveRecentRecord(mode, { ...record, at: new Date().toISOString() });
+  notify(`Calculation saved in latest ${RECENT_LIMIT}.`, 'success', 'Recent calculations');
+}
+
+async function clearRecentRecords(mode) {
+  const records = isCloudRecentUser() ? (recentUiCache[mode] || []) : readLocalRecent(mode);
+  if (!records.length) return;
+  const locationText = isCloudRecentUser() ? 'your account database' : 'this browser';
+  if (!window.confirm(`Delete all ${records.length} saved ${mode} item(s) from ${locationText}?`)) return;
+  if (isCloudRecentUser()) {
+    await sbClearRecentItems(mode);
+    recentUiCache[mode] = [];
+    renderRecentCalculations(mode, []);
+    notify('Latest 5 list cleared from your account.', 'success', 'Recent calculations');
+    return;
+  }
+  writeLocalRecent(mode, []);
+  renderRecentCalculations(mode);
+  notify('Latest 5 list cleared for this browser.', 'success', 'Recent calculations');
 }
 
 async function refreshRecentCalculations(mode) {
@@ -1844,7 +2689,8 @@ async function refreshRecentCalculations(mode) {
   try {
     const remote = await fetchRecentRemote(mode);
     if (remote) {
-      writeLocalRecent(mode, remote);
+      recentUiCache[mode] = remote.slice(0, RECENT_LIMIT);
+      if (!isCloudRecentUser()) writeLocalRecent(mode, remote);
       renderRecentCalculations(mode, remote);
     }
   } catch (e) {
@@ -1855,6 +2701,39 @@ async function refreshRecentCalculations(mode) {
 function refreshAllRecentCalculations() {
   Object.keys(RECENT_MODE_CONFIG).forEach(mode => refreshRecentCalculations(mode));
 }
+
+document.addEventListener('click', async event => {
+  const btn = event.target?.closest?.('.recent-action-btn');
+  if (!btn) return;
+  btn.disabled = true;
+  const original = btn.textContent;
+  const action = btn.dataset.recentAction || 'pdf';
+    btn.textContent = action === 'pdf' ? 'Opening...' : 'Working...';
+  try {
+    if (action === 'pdf') await exportRecentPdf(btn.dataset.recentMode, btn.dataset.recentId);
+    else if (action === 'delete') await deleteRecentRecord(btn.dataset.recentMode, btn.dataset.recentId);
+    else if (action === 'edit') await editRecentRecord(btn.dataset.recentMode, btn.dataset.recentId);
+    else if (action === 'save') await resaveRecentRecord(btn.dataset.recentMode, btn.dataset.recentId);
+    else if (action === 'clear') await clearRecentRecords(btn.dataset.recentMode);
+    else if (action === 'refresh') {
+      await refreshRecentCalculations(btn.dataset.recentMode);
+      notify('Latest 5 list refreshed.', 'success', 'Recent calculations');
+    }
+  } catch (error) {
+    appError(error, 'Could not complete the recent calculation action.', { source:'recent.action', action, mode:btn.dataset.recentMode }, { title:'Recent calculations' });
+  } finally {
+    btn.disabled = false;
+    btn.textContent = original;
+  }
+});
+
+document.addEventListener('click', event => {
+  if (event.target?.id === 'pdfViewerClose' || event.target?.id === 'pdfViewer') closePdfViewer();
+  if (event.target?.id === 'pdfViewerDownload' && activePdfBlob) downloadBlob(activePdfBlob, activePdfFilename);
+});
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape') closePdfViewer();
+});
 
 /* Update the stats display from Supabase */
 async function refreshGlobalStats() {
@@ -1908,7 +2787,7 @@ async function initSupabase() {
 function showLocalStats() {
   const s = getStats();
   document.getElementById('statUsers').textContent    = '—';
-  document.getElementById('statUsersLbl').textContent = 'Supabase not configured';
+  document.getElementById('statUsersLbl').textContent = SUPABASE_CONFIG.isProduction ? 'data service not configured' : 'Supabase not configured';
   document.getElementById('statCalcs').textContent    = (s.total || 0).toLocaleString();
   document.getElementById('statCalcsLbl').textContent = 'on this device';
   updateAdminStats();
@@ -1963,6 +2842,11 @@ let calcTimer;
 function scheduleCalc() { clearTimeout(calcTimer); calcTimer=setTimeout(calculate,180); }
 
 function calculate(options={}) {
+  if (!isSignedInUser()) {
+    if (options.log) requireSignedInForAction('calculate');
+    renderSignedOutCommuteState();
+    return;
+  }
   const vVal=document.getElementById('vehicle').value;
   const distCheck = validateNumberField('distance', { min:0.1, max:10000, label:'Distance' });
   const paxCheck  = validateNumberField('passengers', { min:1, max:100, label:'Passengers' });
@@ -2134,7 +3018,23 @@ document.getElementById('hybridPanel').addEventListener('click',e=>{
   btn.classList.add('active'); currentHtype=btn.dataset.htype; populateVehicles();
 });
 
-document.getElementById('commuteCalcBtn')?.addEventListener('click', () => calculate({ log:true }));
+document.getElementById('commuteCalcBtn')?.addEventListener('click', () => {
+  if (!canSaveRecentRecord('commute')) return;
+  calculate({ log:true });
+});
+document.getElementById('commutePdfBtn')?.addEventListener('click', async () => {
+  if (!requireSignedInForAction('calculate')) return;
+  if (!window._commuteResult) calculate();
+  const r = window._commuteResult;
+  if (!r) {
+    notify('Calculate a commute result before exporting PDF.', 'warn', 'PDF export');
+    return;
+  }
+  await exportPdfReport('commute', 'COMMUTE CARBON FOOTPRINT REPORT', commutePdfLines(r), {
+    filename:`commute_${city().code}_${new Date().toISOString().slice(0,10)}.pdf`,
+    record:{ id:r.id || 'current-commute', payload:r }
+  });
+});
 document.getElementById('vehicle').addEventListener('change',scheduleCalc);
 document.getElementById('distance').addEventListener('input',scheduleCalc);
 document.getElementById('passengers').addEventListener('input',scheduleCalc);
@@ -2403,7 +3303,61 @@ function updateVisionMeter(perPaxKg) {
   if (perPaxKg > 0 && genCta) genCta.style.display = 'block';
 }
 
-/* Apply CSS pollution filter to the right Leaflet map */
+function clearImpactRouteLayer() {
+  if (impactRouteLayer && leafEffect) {
+    leafEffect.removeLayer(impactRouteLayer);
+  }
+  impactRouteLayer = null;
+}
+
+function renderImpactRoutePlume(hazePct, smogIndex) {
+  clearImpactRouteLayer();
+  if (!leafEffect || !lastRouteGeometry || smogIndex <= 0.001 || !window.L) return false;
+  const haloWeight = 16 + Math.round(hazePct * 30);
+  const coreWeight = 5 + Math.round(hazePct * 9);
+  const haloOpacity = Math.min(0.42, 0.10 + hazePct * 0.28);
+  const coreOpacity = Math.min(0.72, 0.18 + hazePct * 0.38);
+  impactRouteLayer = L.layerGroup([
+    L.geoJSON(lastRouteGeometry, {
+      interactive: false,
+      style: {
+        color: '#d6c08a',
+        weight: haloWeight,
+        opacity: haloOpacity,
+        lineJoin: 'round',
+        lineCap: 'round',
+        className: 'impact-route-halo'
+      }
+    }),
+    L.geoJSON(lastRouteGeometry, {
+      interactive: false,
+      style: {
+        color: smogIndex < 0.18 ? '#f3d98b' : '#c79a54',
+        weight: coreWeight,
+        opacity: coreOpacity,
+        lineJoin: 'round',
+        lineCap: 'round',
+        className: 'impact-route-core'
+      }
+    })
+  ]).addTo(leafEffect);
+  return true;
+}
+
+function corridorImpactBackground(hazePct, hasRoutePlume) {
+  const veil = Math.min(0.28, 0.05 + hazePct * 0.18);
+  const corridor = Math.min(0.32, 0.07 + hazePct * 0.24);
+  const plume = Math.min(0.24, 0.05 + hazePct * 0.17);
+  const routeLayerHint = hasRoutePlume ? 'rgba(96,84,62,0.05)' : `rgba(96,84,62,${plume.toFixed(3)})`;
+  return [
+    `linear-gradient(115deg,rgba(224,214,184,${veil.toFixed(3)}),rgba(126,116,94,${(veil * 0.62).toFixed(3)}))`,
+    `radial-gradient(ellipse at 28% 68%,rgba(218,202,158,${corridor.toFixed(3)}),transparent 46%)`,
+    `radial-gradient(ellipse at 72% 30%,rgba(176,154,112,${(corridor * 0.72).toFixed(3)}),transparent 44%)`,
+    `linear-gradient(32deg,transparent 18%,${routeLayerHint} 43%,transparent 68%)`
+  ].join(',');
+}
+
+/* Apply a qualitative environmental impact proxy to the right Leaflet map */
 function applyEmissionEffect() {
   const mapEffectEl = document.getElementById('mapEffect');
   if (!mapEffectEl) return;
@@ -2418,26 +3372,28 @@ function applyEmissionEffect() {
   if (smogIndex <= 0.001) {
     filterStr = 'none';
     smogBg = 'transparent'; smogOpacity = 0;
-    aqiLabel = 'Negligible local-pollutant proxy'; smogLabel = 'Clear conditions';
+    aqiLabel = 'Negligible relative pollutant proxy'; smogLabel = 'Clear proxy';
   } else if (smogIndex < 0.05) {
     filterStr = 'sepia(6%) brightness(98%) saturate(93%) contrast(98%)';
-    smogBg = 'linear-gradient(rgba(210,205,185,0.07),rgba(196,190,170,0.05))'; smogOpacity = 1;
-    aqiLabel = 'Low local-pollutant proxy'; smogLabel = 'Light haze';
+    smogBg = corridorImpactBackground(hazePct, false); smogOpacity = 0.58;
+    aqiLabel = 'Low relative pollutant proxy'; smogLabel = 'Light corridor haze';
   } else if (smogIndex < 0.18) {
     filterStr = 'sepia(18%) saturate(80%) brightness(91%) contrast(93%)';
-    smogBg = 'radial-gradient(circle at 50% 25%,rgba(224,218,190,0.22),rgba(171,158,125,0.12) 55%,rgba(118,110,92,0.08))'; smogOpacity = 1;
-    aqiLabel = 'Moderate local-pollutant proxy'; smogLabel = 'Visible haze';
+    smogBg = corridorImpactBackground(hazePct, false); smogOpacity = 0.76;
+    aqiLabel = 'Moderate relative pollutant proxy'; smogLabel = 'Visible corridor haze';
   } else if (smogIndex < 0.5) {
     filterStr = 'sepia(36%) saturate(62%) brightness(82%) contrast(88%)';
-    smogBg = 'linear-gradient(rgba(164,150,113,0.25),rgba(126,116,94,0.18)),radial-gradient(circle at 50% 20%,rgba(225,214,174,0.20),transparent 58%)'; smogOpacity = 1;
-    aqiLabel = 'High local-pollutant proxy'; smogLabel = 'Dense urban haze';
+    smogBg = corridorImpactBackground(hazePct, false); smogOpacity = 0.9;
+    aqiLabel = 'High relative pollutant proxy'; smogLabel = 'Dense route-corridor haze';
   } else {
     filterStr = 'sepia(58%) saturate(42%) brightness(68%) contrast(82%) blur(0.6px)';
-    smogBg = 'linear-gradient(rgba(110,102,86,0.38),rgba(74,70,62,0.30)),radial-gradient(circle at 48% 22%,rgba(210,196,152,0.25),transparent 48%)'; smogOpacity = 1;
-    aqiLabel = 'Critical local-pollutant proxy'; smogLabel = 'Severe smog proxy';
+    smogBg = corridorImpactBackground(hazePct, false); smogOpacity = 1;
+    aqiLabel = 'Critical relative pollutant proxy'; smogLabel = 'Severe route-corridor proxy';
   }
 
   mapEffectEl.style.filter = filterStr;
+  const plumeRendered = renderImpactRoutePlume(hazePct, smogIndex);
+  if (smogIndex > 0.001) smogBg = corridorImpactBackground(hazePct, plumeRendered);
 
   const smogOverlay = document.getElementById('smogOverlay');
   if (smogOverlay) {
@@ -2457,7 +3413,7 @@ function applyEmissionEffect() {
   const promptPolluted = el('promptPolluted');
   if (promptDetails)  promptDetails.style.display  = '';
   if (promptPolluted) promptPolluted.textContent =
-    `Smog index ${smogIndex.toFixed(3)} = per-person CO2 ${lastPerPaxKg.toFixed(3)} kg x fuel/PUC/local-tailpipe modifiers. Visual haze strength ${(hazePct*100).toFixed(0)}%. This is a qualitative co-emitted PM/NOx proxy, not measured AQI.`;
+    `Impact proxy ${smogIndex.toFixed(3)} = per-person CO2 ${lastPerPaxKg.toFixed(3)} kg x fuel/PUC/local-tailpipe modifiers. Visual overlay strength ${(hazePct*100).toFixed(0)}%. ${plumeRendered ? 'Route geometry is used to weight the plume along the selected road corridor.' : 'No route geometry is available, so the panel uses a city-area corridor proxy.'} This is a qualitative co-emitted PM/NOx activity proxy, not measured AQI, satellite aerosol optical depth, or a physical smog forecast.`;
 
   const visionCompare = el('visionCompare');
   if (visionCompare) {
@@ -2472,7 +3428,7 @@ function applyEmissionEffect() {
     if (el('vcVis'))    el('vcVis').textContent    = visLoss + '%';
   }
 
-  if (el('genBtnText')) el('genBtnText').textContent = 'Update Smog Proxy';
+  if (el('genBtnText')) el('genBtnText').textContent = 'Update Impact Proxy';
   if (el('genBtnIcon')) el('genBtnIcon').textContent = '↻';
 }
 
@@ -2506,9 +3462,9 @@ function generateCityVision() {
 //          Imagery static export (free · no auth · instant)
 //          URL: arcgisonline.com/.../World_Imagery/.../export
 //
-//  RIGHT : synced ESRI satellite view with a CSS aerosol haze proxy.
-//          Haze strength scales with per-person CO2, fuel, PUC status,
-//          and local tailpipe-pollutant risk. This is not measured AQI.
+//  RIGHT : synced ESRI satellite view with a corridor-weighted impact proxy.
+//          Overlay strength scales with per-person CO2, fuel, PUC status,
+//          route geometry, and local tailpipe-pollutant risk. This is not measured AQI.
 //
 //  ESRI bbox format: minLon,minLat,maxLon,maxLat (WGS84)
 // ──────────────────────────────────────────────────────
@@ -2526,7 +3482,7 @@ function generateCityVision() {
 /* ──────────────────────────────────────────────────────
    CITY VISION — Leaflet maps (satellite + street overlay)
    Left panel: interactive map the user can pan/zoom.
-   Right panel: synced non-interactive map with CSS pollution filter.
+   Right panel: synced non-interactive map with route/corridor impact proxy.
    ────────────────────────────────────────────────────── */
 
 // ──────────────────────────────────────────────────────
@@ -2743,6 +3699,8 @@ function setCity(key) {
     if (routePolyline){ routeMap.removeLayer(routePolyline); routePolyline=null; }
     if (pinFrom){ routeMap.removeLayer(pinFrom); pinFrom=null; coordFrom=null; }
     if (pinTo)  { routeMap.removeLayer(pinTo);   pinTo=null;   coordTo=null;   }
+    lastRouteGeometry = null;
+    clearImpactRouteLayer();
     document.getElementById('fromLoc').value='';
     document.getElementById('toLoc').value='';
     ['fromClear','toClear'].forEach(id=>document.getElementById(id).classList.remove('show'));
@@ -2773,6 +3731,7 @@ function setCity(key) {
   if (routeErr) routeErr.textContent = `Could not find one or both locations. Try adding "${city().name}".`;
   const visionCity = document.getElementById('visionCityName');
   if (visionCity) visionCity.textContent = city().name;
+  try { if (typeof updateWelcomeCard === 'function') updateWelcomeCard(currentUser); } catch {}
 
   /* Refresh live data */
   fetchWeather();
@@ -2859,7 +3818,9 @@ document.getElementById('genBtn').addEventListener('click', generateCityVision);
 // ──────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded',()=>{
   /* Restore saved theme */
-  try { if(localStorage.getItem('taint_theme')==='light') applyTheme(true); } catch {}
+  try { applyTheme(localStorage.getItem('taint_theme') === 'light'); } catch { applyTheme(false); }
+  relocateCityVisionToAdmin();
+  applyProductionCopy();
 
   /* Start live clock — updates every second */
   tickClock(); setInterval(tickClock,1000);
@@ -3480,6 +4441,7 @@ function ltStop() {
 /* Wire up buttons */
 document.getElementById('ltToggleBtn').addEventListener('click', () => {
   if (!ltRunning) {
+    setRouteWorkspaceView('live');
     document.getElementById('ltCard').classList.add('open');
     document.getElementById('ltToggleBtn').textContent = '■ Tracking…';
     document.getElementById('ltToggleBtn').classList.add('active');
@@ -3522,14 +4484,57 @@ document.getElementById('ltUseBtn').addEventListener('click', () => {
 // ──────────────────────────────────────────────────────
 //  AUTH SYSTEM
 //  Supabase Auth when configured · local fallback otherwise
-//  Guest / skip always available
+//  Calculations require an authenticated user
 // ──────────────────────────────────────────────────────
 
 let supabaseClient = null;
 let currentUser    = null;
 const AUTH_RESET_COOLDOWN_MS = Number(authSettings().resetEmailCooldownMs || 60000);
+const AUTH_LOCK_KEY = 'taint_auth_lockouts_v1';
+const AUTH_LOCK_MAX_ATTEMPTS = 5;
+const AUTH_LOCK_MS = 24 * 60 * 60 * 1000;
 let authResetInFlightEmail = '';
 let authLastResetRequest = { email:'', at:0 };
+let authLinkNoticeShown = false;
+
+function isSignedInUser() {
+  return !!currentUser;
+}
+
+function requireSignedInForAction(action='calculate') {
+  if (isSignedInUser()) return true;
+  const messages = {
+    buy: 'Sign in is required to use Taint Buy.',
+    calculate: 'Sign in is required to calculate and save your carbon footprint.'
+  };
+  const message = messages[action] || messages.calculate;
+  showAuthOverlay('signin');
+  showAuthError(message, { toast:true, title:'Sign in required' });
+  return false;
+}
+
+let currentMode = 'commute';
+function syncContactSurface(mode=currentMode) {
+  const contact = document.querySelector('.tc-card');
+  if (!contact) return;
+  const signedIn = isSignedInUser();
+  const show = signedIn ? mode === 'buy' : mode === 'taint';
+  contact.hidden = !show;
+  contact.setAttribute('aria-hidden', show ? 'false' : 'true');
+}
+
+function syncSignedInOnlyUI() {
+  const signedIn = isSignedInUser();
+  document.querySelectorAll('[data-signed-in-only="true"]').forEach(el => {
+    el.hidden = !signedIn;
+    el.setAttribute('aria-hidden', signedIn ? 'false' : 'true');
+  });
+  const buySection = document.getElementById('buySection');
+  if (!signedIn && buySection && buySection.style.display !== 'none' && typeof setMode === 'function') {
+    setMode('commute');
+  }
+  syncContactSurface();
+}
 
 if (SB_CONFIGURED() && window.supabase) {
   supabaseClient = window.supabase.createClient(SUPABASE_CONFIG.url, SUPABASE_CONFIG.anonKey, {
@@ -3575,14 +4580,29 @@ function isTaintAdminOwner(user=currentUser) {
   return ownerIds.includes(String(user.id || '').trim()) || ownerEmails.includes(normalizeAuthEmail(user.email));
 }
 
-function authRedirectTo() {
+function authRedirectTo(flow='') {
   const configured = cleanAuthUrl(authSettings().siteUrl || window.TAINT_SUPABASE_CONFIG?.siteUrl || '');
-  if (configured) return configured;
+  let redirect = configured;
+  if (!redirect) {
+    if (location.protocol !== 'http:' && location.protocol !== 'https:') return null;
+    const url = new URL(location.href);
+    url.search = '';
+    url.hash = '';
+    redirect = url.href;
+  }
+  if (!flow) return redirect;
+  try {
+    const url = new URL(redirect);
+    url.searchParams.set('taint_auth', flow);
+    return url.href;
+  } catch {
+    return redirect;
+  }
+}
+
+function currentHttpUrl() {
   if (location.protocol !== 'http:' && location.protocol !== 'https:') return null;
-  const url = new URL(location.href);
-  url.search = '';
-  url.hash = '';
-  return url.href;
+  return new URL(location.href);
 }
 
 function cleanAuthUrl(value) {
@@ -3612,9 +4632,14 @@ function authUrlError() {
   const desc = search.get('error_description') || hash.get('error_description') || search.get('msg') || hash.get('msg') || '';
   const combined = `${code} ${desc}`;
   if (/access_denied|otp_expired|expired|invalid/i.test(combined)) {
-    return 'This email link is expired, already used, or blocked by the Supabase redirect settings. Request a fresh reset link from this app.';
+    return 'This email link is expired, already used, or blocked by the authentication redirect settings. Request a fresh reset link from this app.';
   }
-  return desc || 'Supabase could not complete this email link. Request a fresh reset link from this app.';
+  return desc || 'Authentication could not complete this email link. Request a fresh reset link from this app.';
+}
+
+function authFlowMarker() {
+  const { search, hash } = authUrlParams();
+  return (search.get('taint_auth') || hash.get('taint_auth') || '').toLowerCase();
 }
 
 function enabledOAuthProviders() {
@@ -3633,10 +4658,23 @@ function isEnterpriseSsoEnabled() {
 function updateRuntimeUI() {
   const { envName, envCfg } = runtimeSettings();
   const envLabel = envCfg.label || SUPABASE_CONFIG.label || envName;
+  const prod = !!SUPABASE_CONFIG.isProduction;
   const setText = (id, value) => { const el = document.getElementById(id); if (el) el.textContent = value; };
   setText('adminEnvName', envName);
-  setText('adminEnvProject', `${envLabel} Supabase`);
-  setText('adminEnvSite', authRedirectTo() || 'No redirect URL configured');
+  setText('adminEnvProject', prod ? `${envLabel} data project` : `${envLabel} Supabase`);
+  setText('adminEnvSite', prod ? (authRedirectTo() ? 'Production site configured' : 'Production redirect missing') : (authRedirectTo() || 'No redirect URL configured'));
+}
+
+function applyProductionCopy() {
+  if (!SUPABASE_CONFIG.isProduction) return;
+  const setText = (selector, value) => {
+    const el = document.querySelector(selector);
+    if (el) el.textContent = value;
+  };
+  setText('.layer-tile.persistence span', 'First-party cookies, browser storage fallback, cloud authentication, and queued writes.');
+  setText('.layer-tile.data span', 'Private tables, RPCs, JSON artifacts, media buckets, process logs, and scientific references.');
+  const providerNote = document.getElementById('authProviderNote');
+  if (providerNote) { providerNote.textContent = ''; providerNote.hidden = true; }
 }
 
 function syncAdminVisibility() {
@@ -3647,8 +4685,9 @@ function syncAdminVisibility() {
     el.setAttribute('aria-hidden', allowed ? 'false' : 'true');
   });
   const state = document.getElementById('adminAccessState');
-  if (state) state.textContent = allowed ? 'Supabase owner' : 'Owner only';
+  if (state) state.textContent = allowed ? (SUPABASE_CONFIG.isProduction ? 'Owner' : 'Supabase owner') : 'Owner only';
   updateRuntimeUI();
+  applyProductionCopy();
   const adminSection = document.getElementById('adminSection');
   const adminVisible = !!adminSection && adminSection.style.display !== 'none';
   if (!allowed && adminVisible && typeof setMode === 'function') setMode('commute');
@@ -3656,31 +4695,57 @@ function syncAdminVisibility() {
 }
 
 function providerLabel(provider) {
+  if (SUPABASE_CONFIG.isProduction && provider === 'github') return 'Connected account';
   return provider === 'github' ? 'GitHub' : provider === 'google' ? 'Google' : provider;
 }
 
 function authFriendlyError(error, provider) {
   const msg = error?.message || String(error || 'Authentication failed.');
+  const authService = SUPABASE_CONFIG.isProduction ? 'cloud authentication' : 'Supabase';
   if (/unsupported provider|provider.*not enabled/i.test(msg)) {
-    return `${providerLabel(provider)} sign-in is not enabled in Supabase. Use email/password, continue as guest, or enable the provider in Supabase Authentication → Providers.`;
+    return `${providerLabel(provider)} sign-in is not enabled. Use email/password or enable the provider in ${authService} settings.`;
   }
   if (/email.*provider|provider.*email|email.*disabled|email.*not enabled|smtp/i.test(msg)) {
-    return 'Email/password authentication is not fully enabled in Supabase. Enable Email in Authentication -> Providers and configure SMTP before production.';
+    return `Email/password authentication is not fully enabled. Enable Email in ${authService} settings and configure SMTP before production.`;
+  }
+  if (/already.*registered|registered.*already|already.*exists|user.*exists/i.test(msg)) {
+    return 'This email is already registered. Sign in or use forgot password.';
   }
   if (/invalid login credentials/i.test(msg)) return 'Incorrect email or password.';
   if (/email.*not confirmed|confirm.*email/i.test(msg)) return 'Please confirm your email, then sign in.';
-  if (/signup|signups.*disabled|disabled/i.test(msg)) return 'Email sign-up is disabled in Supabase. Enable Email in Authentication → Providers, or continue in guest mode.';
+  if (/weak password|password.*weak/i.test(msg)) return 'Password does not meet the authentication password policy. Use a stronger password and try again.';
+  if (/rate limit|too many|over_email_send_rate_limit/i.test(msg)) return 'Too many email requests. Wait a moment, then try again.';
+  if (/redirect|redirect_to|not allowed|url/i.test(msg)) return `This email link redirect is not allowed. Add the deployed app URL to ${authService} URL configuration.`;
+  if (/otp_expired|expired|invalid token|token.*invalid/i.test(msg)) return 'This email link is expired or already used. Request a fresh link from this app.';
+  if (/signup|signups.*disabled|disabled/i.test(msg)) return `Email sign-up is disabled. Enable Email in ${authService} settings.`;
   return msg;
 }
 
 function isPasswordRecoveryUrl() {
   const { search, hash } = authUrlParams();
-  return search.get('type') === 'recovery' || hash.get('type') === 'recovery';
+  return authFlowMarker() === 'recovery' || search.get('type') === 'recovery' || hash.get('type') === 'recovery';
+}
+
+function isConfirmationUrl() {
+  const { search, hash } = authUrlParams();
+  const type = (search.get('type') || hash.get('type') || '').toLowerCase();
+  return authFlowMarker() === 'confirm' || ['signup', 'email', 'email_change', 'invite'].includes(type);
+}
+
+function hasAuthExchangeTokens() {
+  const { search, hash } = authUrlParams();
+  return ['code', 'token_hash', 'access_token', 'refresh_token'].some(key => search.has(key) || hash.has(key));
 }
 
 function clearAuthUrlTokens() {
-  if (!history.replaceState || (location.protocol !== 'http:' && location.protocol !== 'https:')) return;
-  history.replaceState(null, document.title, location.pathname);
+  if (!history.replaceState) return;
+  const url = currentHttpUrl();
+  if (!url) return;
+  ['code', 'token_hash', 'type', 'taint_auth', 'error', 'error_code', 'error_description', 'msg', 'provider_token', 'provider_refresh_token', 'expires_in', 'expires_at'].forEach(key => {
+    url.searchParams.delete(key);
+  });
+  url.hash = '';
+  history.replaceState(null, document.title, `${url.pathname}${url.search}`);
 }
 
 function updateAuthProviderUI() {
@@ -3696,21 +4761,8 @@ function updateAuthProviderUI() {
   if (github) github.hidden = !allowProviders || !githubOn;
   if (ssoRow) ssoRow.hidden = !allowProviders || !ssoOn;
   if (note) {
-    const hosted = authRedirectTo();
-    if (!allowProviders) {
-      note.hidden = true;
-    } else if (!supabaseClient) {
-      note.textContent = 'Cloud sign-in is not configured. Email sign-up will use this device only.';
-      note.hidden = false;
-    } else if (!hosted) {
-      note.textContent = 'Social sign-in needs an http(s) hosted URL. Email/password can still be used here.';
-      note.hidden = false;
-    } else if (!googleOn && !githubOn && !ssoOn) {
-      note.textContent = 'Social sign-in is hidden until providers are enabled in supabase-config.js and Supabase Authentication → Providers.';
-      note.hidden = false;
-    } else {
-      note.hidden = true;
-    }
+    note.textContent = '';
+    note.hidden = true;
   }
 }
 
@@ -3784,7 +4836,7 @@ function syncCookieConsent() {
   banner.classList.toggle('hidden', hasCookieAck());
 }
 function userInitials(user) {
-  if (!user) return 'GU';
+  if (!user) return 'SI';
   const source = (user.email || user.name || '').replace(/[^a-z0-9]/ig, '');
   return (source.slice(0, 2) || '?').toUpperCase();
 }
@@ -3837,37 +4889,109 @@ function normalizeAuthEmail(email) {
   return String(email || '').trim().toLowerCase();
 }
 
+function readAuthLocks() {
+  try { return JSON.parse(localStorage.getItem(AUTH_LOCK_KEY) || '{}') || {}; }
+  catch { return {}; }
+}
+
+function writeAuthLocks(map) {
+  try { localStorage.setItem(AUTH_LOCK_KEY, JSON.stringify(map || {})); } catch {}
+}
+
+function authLockKey(email) {
+  return normalizeAuthEmail(email) || 'unknown';
+}
+
+function authLockStatus(email) {
+  const key = authLockKey(email);
+  const locks = readAuthLocks();
+  const rec = locks[key] || {};
+  if (rec.lockedUntil && Date.now() < rec.lockedUntil) {
+    return {
+      locked:true,
+      attempts:Number(rec.attempts || AUTH_LOCK_MAX_ATTEMPTS),
+      remaining:0,
+      lockedUntil:rec.lockedUntil
+    };
+  }
+  if (rec.lockedUntil && Date.now() >= rec.lockedUntil) {
+    delete locks[key];
+    writeAuthLocks(locks);
+    return { locked:false, attempts:0, remaining:AUTH_LOCK_MAX_ATTEMPTS, lockedUntil:0 };
+  }
+  const attempts = Number(rec.attempts || 0);
+  return { locked:false, attempts, remaining:Math.max(0, AUTH_LOCK_MAX_ATTEMPTS - attempts), lockedUntil:0 };
+}
+
+function authLockMessage(status) {
+  const when = status.lockedUntil
+    ? new Date(status.lockedUntil).toLocaleString('en-IN', { dateStyle:'medium', timeStyle:'short' })
+    : 'later';
+  return `Account locked for 24 hours after ${AUTH_LOCK_MAX_ATTEMPTS} incorrect sign-in attempts. Try again after ${when}.`;
+}
+
+function recordAuthFailure(email) {
+  const key = authLockKey(email);
+  const locks = readAuthLocks();
+  const current = locks[key] || {};
+  const attempts = Number(current.attempts || 0) + 1;
+  const lockedUntil = attempts >= AUTH_LOCK_MAX_ATTEMPTS ? Date.now() + AUTH_LOCK_MS : 0;
+  locks[key] = { attempts, lockedUntil, lastFailureAt:Date.now() };
+  writeAuthLocks(locks);
+  return lockedUntil
+    ? { locked:true, attempts, remaining:0, lockedUntil }
+    : { locked:false, attempts, remaining:AUTH_LOCK_MAX_ATTEMPTS - attempts, lockedUntil:0 };
+}
+
+function clearAuthFailures(email) {
+  const key = authLockKey(email);
+  const locks = readAuthLocks();
+  if (locks[key]) {
+    delete locks[key];
+    writeAuthLocks(locks);
+  }
+}
+
+function isCredentialAuthError(error) {
+  const message = error?.message || String(error || '');
+  return /incorrect email or password|invalid login credentials/i.test(message);
+}
+
 async function authSignUp(name, email, password) {
   if (supabaseClient) {
     const options = { data:{ name, username:name, acknowledgement:'Account created. Password is never sent by email.' } };
-    const redirectTo = authRedirectTo();
+    const redirectTo = authRedirectTo('confirm');
     if (redirectTo) options.emailRedirectTo = redirectTo;
     const {data,error} = await supabaseClient.auth.signUp({
-      email,
+      email: normalizeAuthEmail(email),
       password,
       options
     });
     if (error) throw new Error(authFriendlyError(error, 'email'));
-    if (!data.user) throw new Error('Supabase did not create the account. Check Email provider/sign-up settings, or sign in if this email already exists.');
+    if (!data.user) throw new Error('Authentication did not create the account. Check Email provider/sign-up settings, or sign in if this email already exists.');
+    if (Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+      throw new Error('This email is already registered. Sign in or use forgot password.');
+    }
     const pendingConfirmation = !data.session;
     if (pendingConfirmation) notify('Check your email to confirm the account before signing in.', 'success', 'Account created');
-    return {id:data.user?.id,name,email,provider:'supabase',pendingConfirmation};
+    return {id:data.user?.id,name,email:normalizeAuthEmail(email),provider:'supabase',pendingConfirmation};
   }
   return {...(await localSignUp(name,email,password)),provider:'local'};
 }
 async function authSignIn(email, password) {
   if (supabaseClient) {
-    const {data,error} = await supabaseClient.auth.signInWithPassword({email,password});
+    const {data,error} = await supabaseClient.auth.signInWithPassword({email:normalizeAuthEmail(email),password});
     if (error) throw new Error(authFriendlyError(error, 'email'));
     const u=data.user;
+    if (!u) throw new Error('Authentication did not return a signed-in user. Try again, or reset your password.');
     return {id:u.id,name:u.user_metadata?.name||email.split('@')[0],email:u.email,provider:'supabase'};
   }
   return {...(await localSignIn(email,password)),provider:'local'};
 }
 async function authSendPasswordReset(email) {
-  if (!supabaseClient) throw new Error('Password reset email needs Supabase configured. Local-only accounts are stored on this device.');
+  if (!supabaseClient) throw new Error('Password reset email needs cloud authentication configured. Local-only accounts are stored on this device.');
   const normalizedEmail = normalizeAuthEmail(email);
-  const redirectTo = authRedirectTo();
+  const redirectTo = authRedirectTo('recovery');
   if (!redirectTo) throw new Error('Password reset needs a configured https redirect URL in supabase-config.js.');
   if (authResetInFlightEmail === normalizedEmail) throw new Error('A reset link is already being sent for this email. Please wait a moment.');
   const elapsed = Date.now() - authLastResetRequest.at;
@@ -3901,11 +5025,13 @@ async function authAccountExistsForReset(email) {
     return data === true;
   } catch (error) {
     console.warn('TAINT reset email validation failed:', error.message || error);
-    throw new Error('Account validation is not available yet. Run the latest Supabase schema migration, then try again.');
+    throw new Error(SUPABASE_CONFIG.isProduction
+      ? 'Account validation is not available yet. Run the latest database migration, then try again.'
+      : 'Account validation is not available yet. Run the latest Supabase schema migration, then try again.');
   }
 }
 async function authUpdateRecoveredPassword(password) {
-  if (!supabaseClient) throw new Error('Password update needs Supabase configured.');
+  if (!supabaseClient) throw new Error('Password update needs cloud authentication configured.');
   const { data, error } = await supabaseClient.auth.updateUser({ password });
   if (error) throw new Error(authFriendlyError(error, 'email'));
   const u = data.user;
@@ -3916,27 +5042,27 @@ async function authSignInGoogle() {
   return authSignInOAuth('google');
 }
 async function authSignInOAuth(provider) {
-  if (!supabaseClient) { showAuthError('Cloud sign-in needs Supabase configured. Use email or continue as guest.'); return; }
-  if (!isOAuthProviderEnabled(provider)) { showAuthError(`${providerLabel(provider)} sign-in is not enabled for this app. Use email/password or continue as guest.`); return; }
-  const redirectTo = authRedirectTo();
-  if (!redirectTo) { showAuthError('Social sign-in needs the app hosted on http(s). Use email/password locally or continue as guest.'); return; }
+  if (!supabaseClient) { showAuthError('Cloud sign-in needs authentication configured. Use email/password.', { toast:true }); return; }
+  if (!isOAuthProviderEnabled(provider)) { showAuthError(`${providerLabel(provider)} sign-in is not enabled for this app. Use email/password.`, { toast:true }); return; }
+  const redirectTo = authRedirectTo('signin');
+  if (!redirectTo) { showAuthError('Social sign-in needs the app hosted on http(s). Use email/password locally.', { toast:true }); return; }
   const { error } = await supabaseClient.auth.signInWithOAuth({
     provider,
     options:{ redirectTo }
   });
-  if (error) showAuthError(authFriendlyError(error, provider));
+  if (error) showAuthError(authFriendlyError(error, provider), { toast:true });
 }
 async function authSignInSSO(domain) {
-  if (!supabaseClient) { showAuthError('Enterprise SSO needs Supabase configured.'); return; }
-  if (!isEnterpriseSsoEnabled()) { showAuthError('Enterprise SSO is not enabled for this app. Use email/password or continue as guest.'); return; }
-  if (!/^[a-z0-9.-]+\.[a-z]{2,}$/i.test(domain || '')) { showAuthError('Enter your company domain, e.g. company.com.'); return; }
-  const redirectTo = authRedirectTo();
-  if (!redirectTo) { showAuthError('Enterprise SSO needs the app hosted on http(s).'); return; }
+  if (!supabaseClient) { showAuthError('Enterprise SSO needs cloud authentication configured.', { toast:true }); return; }
+  if (!isEnterpriseSsoEnabled()) { showAuthError('Enterprise SSO is not enabled for this app. Use email/password.', { toast:true }); return; }
+  if (!/^[a-z0-9.-]+\.[a-z]{2,}$/i.test(domain || '')) { showAuthError('Enter your company domain, e.g. company.com.', { toast:true }); return; }
+  const redirectTo = authRedirectTo('signin');
+  if (!redirectTo) { showAuthError('Enterprise SSO needs the app hosted on http(s).', { toast:true }); return; }
   const { error } = await supabaseClient.auth.signInWithSSO({
     domain,
     options:{ redirectTo }
   });
-  if (error) showAuthError(authFriendlyError(error, 'SSO'));
+  if (error) showAuthError(authFriendlyError(error, 'SSO'), { toast:true });
 }
 async function authSignOut() {
   try {
@@ -3944,7 +5070,11 @@ async function authSignOut() {
   } catch (e) {
     console.warn('TAINT Supabase sign-out skipped:', e.message);
   }
-  localSignOut(); currentUser=null; updateAuthUI(null);
+  localSignOut();
+  rememberAuthSkip(false);
+  currentUser=null;
+  updateAuthUI(null);
+  showAuthOverlay('signin');
   notify('Signed out.', 'success', 'Account');
 }
 async function restoreSession() {
@@ -3961,11 +5091,71 @@ async function restoreSession() {
   return false;
 }
 
+let welcomeSessionState = { key:'', startedAt:null };
+
+function authUserKey(user) {
+  if (!user) return 'signed-out';
+  return `${user.provider || 'local'}:${user.id || user.email || user.name || 'user'}`;
+}
+
+function displayNameForGreeting(user) {
+  if (!user) return 'User';
+  const raw = String(user.name || user.email?.split('@')[0] || 'User').trim();
+  return raw || 'User';
+}
+
+function greetingForLoginTime(date) {
+  const hour = date.getHours();
+  if (hour < 12) return 'Good morning';
+  if (hour < 17) return 'Good afternoon';
+  return 'Good evening';
+}
+
+function sessionStartForUser(user, key) {
+  const storageKey = `taint_session_started_at_${key}`;
+  if (!user) {
+    const now = Date.now();
+    try { sessionStorage.setItem(storageKey, String(now)); } catch {}
+    return new Date(now);
+  }
+  if (user?.loginAt) {
+    try { sessionStorage.setItem(storageKey, String(user.loginAt)); } catch {}
+    return new Date(user.loginAt);
+  }
+  try {
+    const saved = Number(sessionStorage.getItem(storageKey));
+    if (Number.isFinite(saved) && saved > 0) return new Date(saved);
+  } catch {}
+  const now = Date.now();
+  try { sessionStorage.setItem(storageKey, String(now)); } catch {}
+  return new Date(now);
+}
+
+function updateWelcomeCard(user) {
+  const card = document.getElementById('welcomeCard');
+  if (!card) return;
+  const key = authUserKey(user);
+  if (welcomeSessionState.key !== key || !welcomeSessionState.startedAt) {
+    welcomeSessionState = { key, startedAt: sessionStartForUser(user, key) };
+  }
+  const startedAt = welcomeSessionState.startedAt || new Date();
+  const name = displayNameForGreeting(user);
+  const timeText = new Intl.DateTimeFormat(undefined, { hour:'2-digit', minute:'2-digit' }).format(startedAt);
+  const dateText = new Intl.DateTimeFormat(undefined, { month:'short', day:'numeric' }).format(startedAt);
+  const setText = (id, value) => { const el = document.getElementById(id); if (el) el.textContent = value; };
+  setText('welcomeGreeting', greetingForLoginTime(startedAt));
+  setText('welcomeUserName', name);
+  setText('welcomeLoginTime', user ? `Signed in at ${timeText} on ${dateText}` : `Session ready at ${timeText} on ${dateText}`);
+  setText('welcomeMessage', user
+    ? `Your ${city().name} footprint workspace is ready. Recent calculations, trend history, and PDF exports will save to your account where storage is enabled.`
+    : `Sign in to calculate your ${city().name} carbon footprint, export PDFs, and view saved trend history.`);
+}
+
 function updateAuthUI(user) {
   const initial = userInitials(user);
-  const name    = user ? (user.name||user.email.split('@')[0]) : 'Guest';
+  const name    = user ? (user.name||user.email.split('@')[0]) : 'Signed out';
   const email   = user ? user.email : 'Not signed in';
-  const provider= user ? `${user.provider || 'local'} account` : 'Guest mode';
+  const provider= user ? (SUPABASE_CONFIG.isProduction ? 'Account' : `${user.provider || 'local'} account`) : 'Sign in required';
   const isGuest = !user;
 
   const ab=document.getElementById('userAvatarBtn'),al=document.getElementById('userAvatarInitial');
@@ -3983,6 +5173,10 @@ function updateAuthUI(user) {
   if(mp) mp.textContent=provider;
   if(details){ details.textContent=isGuest?'Sign in to view details':'Account details'; details.disabled=false; }
   if(logout){ logout.textContent=isGuest?'Sign In / Sign Up':'Logout'; }
+  updateWelcomeCard(user);
+  syncSignedInOnlyUI();
+  if (user && typeof calculate === 'function') calculate();
+  if (!user && typeof renderSignedOutCommuteState === 'function') renderSignedOutCommuteState();
   syncAdminVisibility();
   refreshAllRecentCalculations();
 }
@@ -3991,6 +5185,7 @@ function setAccountMenu(open) {
   const menu=document.getElementById('accountMenu'),btn=document.getElementById('accountMenuBtn');
   if(menu) menu.classList.toggle('open', !!open);
   if(btn) btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  if (!open) setPreferencesPanel(false);
 }
 function toggleAccountMenu() {
   setAccountMenu(!document.getElementById('accountMenu')?.classList.contains('open'));
@@ -4003,12 +5198,29 @@ function showAuthOverlay(mode){
   document.getElementById('authOverlay').classList.remove('hidden');
 }
 function hideAuthOverlay(){ document.getElementById('authOverlay').classList.add('hidden'); }
-function showAuthError(msg){ const e=document.getElementById('authError'); if(e) e.textContent=msg; }
-function showAuthSuccess(msg){
+function showAuthError(msg, { toast=false, title='Account' }={}) {
+  const message = msg || '';
+  const e=document.getElementById('authError');
+  const s=document.getElementById('authSuccess');
+  if(e) { e.textContent=message; e.hidden=!message; }
+  if(message && s) { s.textContent=''; s.hidden=true; }
+  if(message && toast) notify(message, 'error', title);
+}
+function showAuthSuccess(msg, { toast=false, title='Account' }={}){
+  const message = msg || '';
   const e=document.getElementById('authSuccess');
-  if(!e) return;
-  e.textContent = msg || '';
-  e.hidden = !msg;
+  const err=document.getElementById('authError');
+  if(e) { e.textContent = message; e.hidden = !message; }
+  if(message && err) { err.textContent=''; err.hidden=true; }
+  if(message && toast) notify(message, 'success', title);
+}
+function showAuthFailure(error, title='Account') {
+  showAuthError(authFriendlyError(error, 'email'), { toast:true, title });
+}
+function showAuthLinkNoticeOnce(message, title='Account') {
+  if (authLinkNoticeShown) return;
+  authLinkNoticeShown = true;
+  showAuthSuccess(message, { toast:true, title });
 }
 
 let authMode='signin';
@@ -4057,6 +5269,14 @@ function setAuthMode(mode) {
 }
 document.querySelectorAll('.auth-tab').forEach(tab=>{
   tab.addEventListener('click',()=> setAuthMode(tab.dataset.tab));
+});
+['authName', 'authEmail', 'authPassword', 'authConfirmPassword', 'authSsoDomain'].forEach(id => {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.addEventListener('input', () => {
+    setFieldInvalid(el, '');
+    showAuthError('');
+  });
 });
 
 function validateAuthForm(mode, { name='', email='', password='', confirmPassword='' }={}) {
@@ -4120,7 +5340,7 @@ document.addEventListener('click', async e => {
       await authSendPasswordReset(checked.email);
       showAuthSuccess(`A secure password reset email has been sent to ${checked.email}. Follow the link, then create a new password here.`);
       notify('Password reset email sent.', 'success', 'Account');
-    } catch(err){ showAuthError(err.message); }
+    } catch(err){ showAuthFailure(err); }
     finally{ btn.disabled=false; btn.textContent=authSubmitText(); }
     return;
   }
@@ -4138,13 +5358,22 @@ document.addEventListener('click', async e => {
       updateAuthUI(currentUser);
       hideAuthOverlay();
       notify('Password updated. You are signed in.', 'success', 'Account');
-    } catch(err){ showAuthError(err.message); }
+    } catch(err){ showAuthFailure(err); }
     finally{ btn.disabled=false; btn.textContent=authSubmitText(); }
     return;
   }
 
   const checked = validateAuthForm(authMode, { name, email, password:pass });
   if (!checked) return;
+  if (authMode === 'signin') {
+    const lock = authLockStatus(checked.email);
+    if (lock.locked) {
+      const message = authLockMessage(lock);
+      setFieldInvalid(document.getElementById('authPassword'), message);
+      showAuthError(message, { toast:true, title:'Account locked' });
+      return;
+    }
+  }
   btn.disabled=true; btn.textContent=authMode==='signup'?'Creating…':'Signing in…';
   try {
     currentUser=authMode==='signup'?await authSignUp(checked.name,checked.email,checked.password):await authSignIn(checked.email,checked.password);
@@ -4154,15 +5383,33 @@ document.addEventListener('click', async e => {
       showAuthSuccess(`Acknowledgement sent to ${checked.email}. Check your email to confirm the account, then sign in. Your password is never emailed.`);
       return;
     }
+    if (authMode === 'signin') clearAuthFailures(checked.email);
     rememberAuthSkip(false);
     await sbUpsertProfile(currentUser);
     updateAuthUI(currentUser); hideAuthOverlay();
     notify(authMode==='signup' ? 'Account ready. Password was stored securely, not emailed.' : 'Signed in successfully.', 'success', 'Account');
-  } catch(err){ showAuthError(err.message); }
+  } catch(err){
+    if (authMode === 'signin' && isCredentialAuthError(err)) {
+      const status = recordAuthFailure(checked.email);
+      const message = status.locked
+        ? authLockMessage(status)
+        : `Incorrect email or password. ${status.remaining} attempt${status.remaining === 1 ? '' : 's'} remaining before a 24-hour lock.`;
+      setFieldInvalid(document.getElementById('authPassword'), message);
+      showAuthError(message, { toast:true, title:status.locked ? 'Account locked' : 'Sign in failed' });
+    } else {
+      showAuthFailure(err);
+    }
+  }
   finally{ btn.disabled=false; btn.textContent=authSubmitText(); }
 });
 
 document.addEventListener('click', e => {
+  if (e.target?.id === 'authCloseBtn') {
+    hideAuthOverlay();
+    showAuthError('');
+    showAuthSuccess('');
+    return;
+  }
   if (e.target?.id === 'authGoogle') authSignInGoogle();
   if (e.target?.id === 'authGithub') authSignInOAuth('github');
   if (e.target?.id === 'authSsoBtn') authSignInSSO(document.getElementById('authSsoDomain')?.value?.trim());
@@ -4174,10 +5421,18 @@ document.addEventListener('click', e => {
 });
 
 document.addEventListener('click', e => {
-  if (e.target?.id !== 'authSkip') return;
-  hideAuthOverlay(); currentUser=null; updateAuthUI(null);
-  rememberAuthSkip(true);
-  notify('Continuing in guest mode. Preference saved with a first-party SameSite cookie.', 'success', 'Account');
+  const toggle = e.target?.closest?.('.password-toggle');
+  if (!toggle) return;
+  const input = toggle.id === 'authConfirmPasswordToggle'
+    ? document.getElementById('authConfirmPassword')
+    : document.getElementById('authPassword');
+  if (!input) return;
+  const show = input.type === 'password';
+  input.type = show ? 'text' : 'password';
+  toggle.setAttribute('aria-pressed', show ? 'true' : 'false');
+  toggle.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+  const icon = toggle.querySelector('span');
+  if (icon) icon.textContent = show ? '⊘' : '👁';
 });
 
 document.addEventListener('click', e => {
@@ -4185,14 +5440,44 @@ document.addEventListener('click', e => {
   rememberAuthSkip(false);
   setCookieAck(false);
   syncCookieConsent();
-  notify('TAINT guest preference cookie cleared.', 'success', 'Cookies');
+  notify('TAINT preference cookies cleared.', 'success', 'Cookies');
+});
+
+function setPreferencesPanel(open=true) {
+  const panel = document.getElementById('accountPreferences');
+  const btn = document.getElementById('accountPrefsBtn');
+  if (panel) panel.hidden = !open;
+  if (btn) btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+}
+
+function clearBrowserPreferences() {
+  rememberAuthSkip(false);
+  setCookieAck(false);
+  syncCookieConsent();
+  notify('Browser storage preference reset. The cookie notice will show again when needed.', 'success', 'Preferences');
+}
+
+document.addEventListener('click', e => {
+  if (!['cookieAcceptBtn', 'cookieNecessaryBtn'].includes(e.target?.id)) return;
+  setCookieAck(true);
+  syncCookieConsent();
+  notify(e.target.id === 'cookieAcceptBtn' ? 'All first-party storage preferences saved.' : 'Necessary browser storage preference saved.', 'success', 'Cookies');
 });
 
 document.addEventListener('click', e => {
-  if (e.target?.id !== 'cookieAcceptBtn') return;
-  setCookieAck(true);
-  syncCookieConsent();
-  notify('Cookie preference saved.', 'success', 'Cookies');
+  if (e.target?.id !== 'cookieCustomizeBtn') return;
+  setAccountMenu(true);
+  setPreferencesPanel(true);
+  notify('Cookie preferences are available from Settings - Preferences in the account menu.', 'success', 'Cookie settings');
+});
+
+document.addEventListener('click', e => {
+  const link = e.target?.closest?.('.cookie-policy-link');
+  if (!link) return;
+  e.preventDefault();
+  setAccountMenu(true);
+  setPreferencesPanel(true);
+  notify('Cookie controls are under Settings - Preferences.', 'success', 'Cookie settings');
 });
 
 document.addEventListener('click', e => {
@@ -4212,6 +5497,21 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape') setAccountMenu(false);
 });
 document.addEventListener('click', async e => {
+  if (e.target?.id === 'accountPrefsBtn') {
+    const panel = document.getElementById('accountPreferences');
+    setPreferencesPanel(panel?.hidden !== false);
+    return;
+  }
+  if (e.target?.id === 'prefCookieNecessaryBtn' || e.target?.id === 'prefCookieAcceptBtn') {
+    setCookieAck(true);
+    syncCookieConsent();
+    notify(e.target.id === 'prefCookieAcceptBtn' ? 'All first-party storage preferences saved.' : 'Necessary browser storage preference saved.', 'success', 'Preferences');
+    return;
+  }
+  if (e.target?.id === 'prefCookieClearBtn') {
+    clearBrowserPreferences();
+    return;
+  }
   if (e.target?.id === 'accountLogoutBtn') {
     setAccountMenu(false);
     if (!currentUser) showAuthOverlay();
@@ -4232,12 +5532,17 @@ if(supabaseClient){
         authRecoveryMode = true;
         updateAuthUI(currentUser);
         showAuthOverlay('reset');
-        showAuthSuccess('Email verified. Create a new password to finish resetting your account.');
+        showAuthLinkNoticeOnce('Email verified. Create a new password to finish resetting your account.', 'Password reset');
+        clearAuthUrlTokens();
         return;
       }
       if (authRecoveryMode || authMode === 'reset') return;
       sbUpsertProfile(currentUser);
       updateAuthUI(currentUser); hideAuthOverlay();
+      if (isConfirmationUrl()) {
+        showAuthLinkNoticeOnce('Email confirmed. You are signed in.', 'Account confirmed');
+        clearAuthUrlTokens();
+      }
     }
   });
 }
@@ -4248,21 +5553,43 @@ async function initAuth(){
   if (linkError) {
     updateAuthUI(currentUser);
     showAuthOverlay('forgot');
-    showAuthError(linkError);
+    showAuthError(linkError, { toast:true, title:'Email link failed' });
     clearAuthUrlTokens();
     return;
   }
-  const skipped   = hasAuthSkip();
+  rememberAuthSkip(false);
   const hasSession= await restoreSession();
   if (supabaseClient && isPasswordRecoveryUrl()) {
-    authRecoveryMode = true;
-    if (currentUser) updateAuthUI(currentUser);
-    showAuthOverlay('reset');
-    showAuthSuccess('Create a new password to finish resetting your account.');
+    if (hasSession || hasAuthExchangeTokens()) {
+      authRecoveryMode = true;
+      if (currentUser) updateAuthUI(currentUser);
+      showAuthOverlay('reset');
+      showAuthLinkNoticeOnce('Create a new password to finish resetting your account.', 'Password reset');
+      if (hasSession) clearAuthUrlTokens();
+    } else {
+      updateAuthUI(null);
+      showAuthOverlay('forgot');
+      showAuthError('Use the latest password reset email link, or request a fresh reset link from this app.', { toast:true, title:'Password reset' });
+      clearAuthUrlTokens();
+    }
+    return;
+  }
+  if (supabaseClient && isConfirmationUrl()) {
+    if (hasSession) {
+      sbUpsertProfile(currentUser);
+      updateAuthUI(currentUser);
+      hideAuthOverlay();
+      showAuthLinkNoticeOnce('Email confirmed. You are signed in.', 'Account confirmed');
+      clearAuthUrlTokens();
+    } else {
+      updateAuthUI(null);
+      showAuthOverlay('signin');
+      showAuthLinkNoticeOnce('Email confirmation was received. Sign in with your email and password to continue.', 'Account confirmed');
+      if (!hasAuthExchangeTokens()) clearAuthUrlTokens();
+    }
     return;
   }
   if(hasSession){ sbUpsertProfile(currentUser); updateAuthUI(currentUser); hideAuthOverlay(); }
-  else if(skipped){ updateAuthUI(null); hideAuthOverlay(); }
   else { updateAuthUI(null); setTimeout(showAuthOverlay,700); }
 }
 
@@ -4339,6 +5666,8 @@ function wpUpdateSplitSum() {
   document.getElementById(id)?.addEventListener('input', wpUpdateSplitSum));
 
 function calculateWorkplace() {
+  if (!canSaveRecentRecord('workplace')) return;
+  if (!requireSignedInForAction('calculate')) return;
   const employees  = Math.max(1, wpV('wpEmployees'));
   const days       = Math.max(1, wpV('wpDays'));
   const sector     = wpS('wpSector');
@@ -4541,10 +5870,13 @@ function calculateWorkplace() {
 
 document.getElementById('wpCalcBtn').addEventListener('click', calculateWorkplace);
 
-/* Export report as plain text summary */
-document.getElementById('wpExportBtn').addEventListener('click', () => {
+/* Export report as PDF summary */
+document.getElementById('wpExportBtn').addEventListener('click', async () => {
   const r = window._wpResult;
-  if (!r) return;
+  if (!r) {
+    notify('Calculate workplace footprint before exporting PDF.', 'warn', 'PDF export');
+    return;
+  }
   const lines = [
     'WORKPLACE CARBON FOOTPRINT REPORT',
     'Generated: ' + new Date().toLocaleString('en-IN'),
@@ -4567,12 +5899,10 @@ document.getElementById('wpExportBtn').addEventListener('click', () => {
     'Emission factors: India CEA 2023 grid · ICAO flights · IPCC AR6',
     'Tool: Chennai Carbon Calculator',
   ];
-  const blob = new Blob([lines.join('\n')], {type:'text/plain'});
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = 'workplace_carbon_report.txt';
-  a.click();
-  URL.revokeObjectURL(a.href);
+  await exportPdfReport('workplace', 'WORKPLACE CARBON FOOTPRINT REPORT', lines, {
+    filename:`workplace_${city().code}_${new Date().toISOString().slice(0,10)}.pdf`,
+    record:{ id:'current-workplace', payload:r }
+  });
 });
 
 // ──────────────────────────────────────────────────────
@@ -4647,6 +5977,8 @@ function hmV(id){ return parseFloat(document.getElementById(id)?.value||0)||0; }
 function hmS(id){ return document.getElementById(id)?.value||''; }
 
 function calculateHome(){
+  if (!canSaveRecentRecord('home')) return;
+  if (!requireSignedInForAction('calculate')) return;
   const occupants  = Math.max(1, hmV('hmOccupants'));
   const gridKgKwh  = city().grid;
 
@@ -4871,8 +6203,12 @@ function calculateHome(){
 
 document.getElementById('hmCalcBtn').addEventListener('click', calculateHome);
 
-document.getElementById('hmExportBtn').addEventListener('click',()=>{
-  const r=window._hmResult; if(!r) return;
+document.getElementById('hmExportBtn').addEventListener('click', async ()=>{
+  const r=window._hmResult;
+  if(!r) {
+    notify('Calculate home footprint before exporting PDF.', 'warn', 'PDF export');
+    return;
+  }
   const lines=[
     'HOME CARBON FOOTPRINT REPORT',
     'Generated: '+new Date().toLocaleString('en-IN'),
@@ -4893,11 +6229,10 @@ document.getElementById('hmExportBtn').addEventListener('click',()=>{
     `Grid intensity used: ${city().grid} kg CO₂/kWh (${city().state}, CEA 2023)`,
     'References: IPCC AR6 · ICAO CORSIA · MoEFCC India · BEE appliance data',
   ];
-  const blob=new Blob([lines.join('\n')],{type:'text/plain'});
-  const a=document.createElement('a');
-  a.href=URL.createObjectURL(blob);
-  a.download='home_carbon_report.txt';
-  a.click(); URL.revokeObjectURL(a.href);
+  await exportPdfReport('home', 'HOME CARBON FOOTPRINT REPORT', lines, {
+    filename:`home_${city().code}_${new Date().toISOString().slice(0,10)}.pdf`,
+    record:{ id:'current-home', payload:r }
+  });
 });
 
 /* Update city grid note when city changes */
@@ -4950,7 +6285,7 @@ function buildSidebar() {
       {mode:'admin',     icon:'⚙️', label:'Taint Admin', adminOnly:true},
     ];
     sbModes.innerHTML = modes.map(m =>
-      `<button class="sb-mode-btn${m.mode==='commute'?' active':''}" data-mode="${m.mode}"${m.adminOnly?' data-admin-only="true" hidden':''}>
+      `<button class="sb-mode-btn${m.mode==='commute'?' active':''}" data-mode="${m.mode}"${m.adminOnly?' data-admin-only="true" hidden':''}${m.mode==='buy'?' data-signed-in-only="true" hidden':''}>
          ${m.icon} ${m.label}
        </button>`
     ).join('');
@@ -4967,8 +6302,7 @@ function buildSidebar() {
 
   syncCityControls(currentCityKey);
   updateSbCity();
-  updateSbWeather();
-  updateSbStats();
+  syncSignedInOnlyUI();
   syncAdminVisibility();
 }
 
@@ -4984,7 +6318,7 @@ function updateSbWeather() {
   const aqiEl    = document.getElementById('aqiVal');
   const aqiEmoji = document.getElementById('aqiEmoji')?.textContent || '🌫️';
   el.innerHTML = `
-    <div style="font-size:11px;color:var(--hi);margin-bottom:4px;text-transform:uppercase;letter-spacing:.07em">Live · ${city().name}</div>
+    <div style="font-size:11px;color:var(--hi);margin-bottom:4px;text-transform:uppercase;letter-spacing:.07em">${city().name}</div>
     <div style="display:flex;gap:10px;align-items:center">
       <span style="font-size:20px;font-weight:700;color:var(--tx)">${tempVal}°C</span>
       <span style="font-size:13px">${aqiEmoji} AQI ${aqiEl?.textContent||'—'}</span>
@@ -5034,12 +6368,21 @@ function setMode(mode) {
     syncAdminVisibility();
     if (!currentUser) {
       showAuthOverlay('signin');
-      showAuthError('Taint Admin is visible only after the Supabase owner signs in.');
+      showAuthError(SUPABASE_CONFIG.isProduction
+        ? 'Taint Admin is visible only after the configured owner signs in.'
+        : 'Taint Admin is visible only after the Supabase owner signs in.');
     } else {
-      notify('Taint Admin is restricted to the configured Supabase owner.', 'warn', 'Admin');
+      notify(SUPABASE_CONFIG.isProduction
+        ? 'Taint Admin is restricted to the configured owner.'
+        : 'Taint Admin is restricted to the configured Supabase owner.', 'warn', 'Admin');
     }
     mode = 'commute';
   }
+  if (mode === 'buy' && !isSignedInUser()) {
+    requireSignedInForAction('buy');
+    mode = 'commute';
+  }
+  currentMode = mode;
   document.querySelectorAll('.mode-tab').forEach(b =>
     b.classList.toggle('active', b.dataset.mode === mode));
   document.querySelectorAll('.sb-mode-btn').forEach(b =>
@@ -5055,6 +6398,7 @@ function setMode(mode) {
   if (mode === 'admin') updateAdminStats();
   if (RECENT_MODE_CONFIG[mode]) refreshRecentCalculations(mode);
   syncAdminVisibility();
+  syncContactSurface(mode);
 }
 
 document.querySelectorAll('.mode-tab').forEach(btn => {
@@ -5335,6 +6679,8 @@ function mtSyncToolFootprint() {
 
 /* Calculate full My Taint profile from imported mode data or wizard inputs */
 function mtCalculateProfile() {
+  if (!requireSignedInForAction('calculate')) return;
+  if (!canSaveRecentRecord('taint')) return;
   const cityKey = document.getElementById('mtCity')?.value || currentCityKey;
   setCity(cityKey);
   mtImportSavedModeResults({ silent:true });
@@ -5469,7 +6815,8 @@ document.getElementById('mtFeedbackSubmit').addEventListener('click', async () =
 });
 
 /* ── Export full profile ── */
-document.getElementById('mtExportBtn').addEventListener('click', () => {
+document.getElementById('mtExportBtn').addEventListener('click', async () => {
+  if (!requireSignedInForAction('calculate')) return;
   const name = document.getElementById('mtName').value || 'User';
   const lines = [
     `MY TAINT — PERSONAL CARBON PROFILE`,
@@ -5497,11 +6844,10 @@ document.getElementById('mtExportBtn').addEventListener('click', () => {
   lines.push('');
   lines.push(`Tool session footprint: ${(SC.totalGrams()*1000).toFixed(2)} mg CO₂`);
   lines.push(`Grid intensity: ${city().grid} kg CO₂/kWh (${city().state}, CEA 2023)`);
-  const blob = new Blob([lines.join('\n')], {type:'text/plain'});
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `my_taint_${city().code}_${name.replace(/\s+/g,'_')}.txt`;
-  a.click(); URL.revokeObjectURL(a.href);
+  await exportPdfReport('taint', 'MY TAINT PERSONAL CARBON PROFILE', lines, {
+    filename:`my_taint_${city().code}_${name.replace(/\s+/g,'_')}.pdf`,
+    record:{ id:'current-my-taint', payload:{ mtSaved, total } }
+  });
 });
 
 /* Initialise wizard */
@@ -5785,10 +7131,14 @@ function tbNormalizeVendorLinks() {
     const query = tbProductSearchQuery(product);
     if (product.links.amazon) product.links.amazon = tbAmazonSearchLink(query);
     if (product.links.flipkart) product.links.flipkart = tbFlipkartSearchLink(query);
-    if (product.links.brand) product.links.brand = tbSafeExternalUrl(product.links.brand);
+    product.links.brand = null;
   });
 }
 tbNormalizeVendorLinks();
+
+function tbAvailableProducts() {
+  return TAINT_PRODUCTS.filter(product => product.links?.amazon || product.links?.flipkart);
+}
 
 function tbVendorIcon(domain) {
   return `https://www.google.com/s2/favicons?sz=96&domain=${encodeURIComponent(domain)}`;
@@ -5825,12 +7175,147 @@ function tbProductImage(product) {
   return product.image || TB_VENDOR_IMAGES[product.id] || tbVendorIcon('example.com');
 }
 
+function tbLatestRecentValue(mode) {
+  const cloud = Array.isArray(recentUiCache[mode]) ? recentUiCache[mode] : [];
+  const local = readLocalRecent(mode);
+  const first = [...cloud, ...local].find(item => Number(item?.value) > 0);
+  return Number(first?.value || 0);
+}
+
+function tbBuildUserCalculationProfile() {
+  const commute = mtSaved?.commute || {};
+  const home = mtSaved?.home || {};
+  const workplace = mtSaved?.workplace || {};
+  const latestCommute = tbLatestRecentValue('commute');
+  const latestHome = tbLatestRecentValue('home');
+  const latestWorkplace = tbLatestRecentValue('workplace');
+  const commuteT = Number(commute.t || window._commuteResult?.annualTco2e || window._commuteResult?.t || latestCommute || 0);
+  const homeT = Number(home.t || window._hmResult?.total || latestHome || 0);
+  const workplaceT = Number(workplace.t || window._wpResult?.total || latestWorkplace || 0);
+  const electricityT = Number(home.elecT || window._hmResult?.s2_elec || 0) + Number(workplace.elecT || window._wpResult?.s2_elec || 0);
+  const acT = Number(home.acT || 0) + Number(workplace.acT || 0);
+  const lpgT = Number(home.lpgT || 0);
+  const totalT = commuteT + homeT + workplaceT;
+  const sources = [
+    ['commute', commuteT],
+    ['home', homeT],
+    ['workplace', workplaceT],
+    ['electricity', electricityT],
+    ['cooling', acT],
+    ['cooking fuel', lpgT]
+  ].sort((a,b) => b[1] - a[1]);
+  return {
+    city: city().name,
+    commuteT,
+    homeT,
+    workplaceT,
+    electricityT,
+    acT,
+    lpgT,
+    totalT,
+    commuteMode: commute.mode || window._commuteResult?.mode || '',
+    commuteKm: Number(commute.km || window._commuteResult?.km || 0),
+    topSource: sources[0]?.[0] || 'overall footprint',
+    hasProfile: totalT > 0 || latestCommute > 0 || latestHome > 0 || latestWorkplace > 0
+  };
+}
+
+function tbTextForProduct(product) {
+  return [
+    product.id,
+    product.cat,
+    product.name,
+    product.tagline,
+    product.desc,
+    ...(product.tags || [])
+  ].join(' ').toLowerCase();
+}
+
+function tbScoreProductForProfile(product, profile) {
+  const text = tbTextForProduct(product);
+  let score = Number(product.eco || 0) / 4;
+  if (!profile.hasProfile) return score;
+
+  if (profile.commuteT >= 0.4) {
+    if (product.cat === 'transport') score += 48;
+    if (/electric|ev|scooter|charger/.test(text)) score += 22;
+    if (/cycle|bicycle/.test(text) && (!profile.commuteKm || profile.commuteKm <= 14)) score += 18;
+  }
+  if (profile.electricityT >= 0.5 || profile.workplaceT >= 1.5) {
+    if (/solar|led|inverter|5 star|monitor|water heater/.test(text)) score += 42;
+    if (product.cat === 'energy') score += 20;
+  }
+  if (profile.acT >= 0.2) {
+    if (/5 star|inverter|ac|solar|monitor/.test(text)) score += 34;
+  }
+  if (profile.lpgT >= 0.15) {
+    if (/induction|kettle|pressure|electric|solar water/.test(text)) score += 32;
+    if (product.cat === 'kitchen') score += 12;
+  }
+  if (profile.homeT >= 1) {
+    if (/compost|reusable|rainwater|bamboo|organic|recycled/.test(text)) score += 16;
+  }
+  if (profile.topSource === 'commute' && product.cat !== 'transport') score -= 8;
+  if ((profile.topSource === 'electricity' || profile.topSource === 'cooling') && !/solar|led|inverter|5 star|monitor|energy/.test(text)) score -= 6;
+  return score;
+}
+
+function tbProductReason(product, profile) {
+  const saving = product.saving || 'measurable CO2 savings';
+  if (!profile.hasProfile) return `Best general fit for ${profile.city}: high eco score and ${saving}.`;
+  if (profile.commuteT >= Math.max(profile.homeT, profile.workplaceT) && product.cat === 'transport') {
+    return `Your commute is the strongest signal, so this targets transport emissions with ${saving}.`;
+  }
+  if ((profile.electricityT >= 0.5 || profile.acT >= 0.2) && /solar|led|inverter|5 star|monitor/.test(tbTextForProduct(product))) {
+    return `Your electricity and cooling footprint is prominent, so this targets power use with ${saving}.`;
+  }
+  if (profile.lpgT >= 0.15 && product.cat === 'kitchen') {
+    return `Your home cooking fuel signal is visible, so this helps shift daily kitchen energy with ${saving}.`;
+  }
+  if (profile.workplaceT >= 1 && product.cat === 'energy') {
+    return `Your workplace footprint points to efficiency upgrades, and this product offers ${saving}.`;
+  }
+  return `Matched to your ${profile.topSource} footprint signal and product saving estimate: ${saving}.`;
+}
+
+function tbRankedProductPicks(profile) {
+  return tbAvailableProducts()
+    .map(product => ({
+      product,
+      score: tbScoreProductForProfile(product, profile),
+      reason: tbProductReason(product, profile)
+    }))
+    .sort((a,b) => b.score - a.score)
+    .slice(0, 3);
+}
+
+function tbRenderCalculationPicks(profile) {
+  const body = document.getElementById('tbAiBody');
+  if (!body) return;
+  const picks = tbRankedProductPicks(profile);
+  body.innerHTML = '<div class="tb-ai-picks">' +
+    picks.map((pick, idx) => {
+      const prod = pick.product;
+      return `<div class="tb-ai-pick">
+        <span class="tb-ai-pick-num">#${idx + 1}</span>
+        <img class="tb-ai-pick-img" src="${tbProductImage(prod)}" alt="${escapeHTML(prod.name)}" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">
+        <div class="tb-ai-pick-body">
+          <div class="tb-ai-pick-name">${escapeHTML(prod.name)}</div>
+          <div class="tb-ai-pick-why">${escapeHTML(pick.reason)}</div>
+        </div>
+      </div>`;
+    }).join('') + '</div>';
+  if (!profile.hasProfile) {
+    body.innerHTML += '<div class="tb-ai-hint">Calculate a mode or save My Taint to make these picks more specific.</div>';
+  }
+}
+
 function tbBuyButton(platform, url, productId) {
   const safeUrl = tbSafeExternalUrl(url);
   if (!safeUrl) return '';
-  const labels = { amazon:'Amazon', flipkart:'Flipkart', brand:'Brand Site' };
+  const labels = { amazon:'Amazon', flipkart:'Flipkart' };
   const label = labels[platform] || platform;
-  return `<a class="tb-buy-btn ${platform}" href="${safeUrl}" target="_blank" rel="noopener noreferrer sponsored" onclick="tbTrack('${platform}','${productId}')">${label}</a>`;
+  return `<a class="tb-buy-btn ${platform}" href="${safeUrl}" target="_blank" rel="noopener noreferrer sponsored" onclick="return tbTrack('${platform}','${productId}')">${label}</a>`;
 }
 
 /* ── Render product cards ── */
@@ -5845,7 +7330,6 @@ function tbRenderGrid(products) {
     const buyBtns = [
       tbBuyButton('amazon', p.links.amazon, p.id),
       tbBuyButton('flipkart', p.links.flipkart, p.id),
-      tbBuyButton('brand', p.links.brand, p.id),
     ].filter(Boolean).join('');
 
     return `
@@ -5867,7 +7351,7 @@ function tbRenderGrid(products) {
       </div>
       <div class="tb-commission">${p.commission}</div>
       <div class="tb-buy-row">${buyBtns}</div>
-      <button class="tb-owned-btn" type="button" onclick="tbRecordProductStatus('bought','${p.id}')">Mark Bought</button>
+      <button class="tb-owned-btn" type="button" onclick="return tbRecordProductStatus('bought','${p.id}')">Mark Bought</button>
     </div>`;
   }).join('');
   document.getElementById('tbCount').textContent = `${products.length} product${products.length!==1?'s':''}`;
@@ -5875,7 +7359,7 @@ function tbRenderGrid(products) {
 
 /* ── Track clicks (analytics stub) ── */
 function tbProductById(productId) {
-  return TAINT_PRODUCTS.find(p => p.id === productId) || null;
+  return tbAvailableProducts().find(p => p.id === productId) || null;
 }
 
 function tbStoreLocalStatus(record) {
@@ -5890,14 +7374,14 @@ function tbStoreLocalStatus(record) {
     unit:'INR',
     payload: record
   };
-  const existing = readLocalRecent('buy').filter(item => item.id !== row.id);
-  writeLocalRecent('buy', [row, ...existing]);
-  renderRecentCalculations('buy');
+  saveRecentRecord('buy', row);
 }
 
 function tbRecordProductStatus(status, productId, platform='manual') {
+  if (!requireSignedInForAction('buy')) return false;
+  if (!canSaveRecentRecord('buy')) return false;
   const product = tbProductById(productId);
-  if (!product) return;
+  if (!product) return false;
   const normalizedStatus = status === 'bought' ? 'bought' : 'checked_out';
   const record = {
     product_id : product.id,
@@ -5921,9 +7405,11 @@ function tbRecordProductStatus(status, productId, platform='manual') {
     metadata    : { eco:product.eco, saving:product.saving, tags:product.tags, source:'taint_buy' }
   }, 'functional');
   if (normalizedStatus === 'bought') notify(`${product.name} added to your bought list.`, 'success', 'Taint Buy');
+  return true;
 }
 
 function tbTrack(platform, productId) {
+  if (!requireSignedInForAction('buy')) return false;
   const product = tbProductById(productId);
   try {
     const key = `tb_click_${Date.now()}`;
@@ -5937,6 +7423,7 @@ function tbTrack(platform, productId) {
     metadata  : product ? { productName:product.name, priceNum:product.priceNum || 0 } : {}
   }, 'functional');
   tbRecordProductStatus('checked_out', productId, platform);
+  return true;
 }
 
 /* ── Filter + sort ── */
@@ -5944,7 +7431,7 @@ let tbCurrentCat  = 'all';
 let tbCurrentSort = 'saving';
 
 function tbApplyFilter() {
-  let list = TAINT_PRODUCTS.filter(p => tbCurrentCat === 'all' || p.cat === tbCurrentCat);
+  let list = tbAvailableProducts().filter(p => tbCurrentCat === 'all' || p.cat === tbCurrentCat);
   if (tbCurrentSort === 'saving')      list.sort((a,b) => b.eco - a.eco);
   else if (tbCurrentSort === 'eco')    list.sort((a,b) => b.eco - a.eco);
   else if (tbCurrentSort === 'price_asc')  list.sort((a,b) => a.priceNum - b.priceNum);
@@ -5966,79 +7453,23 @@ document.getElementById('tbSort').addEventListener('change', function() {
   tbApplyFilter();
 });
 
-/* ── AI personalised picks using Claude API ── */
+/* ── Calculation-based personalised picks ── */
 document.getElementById('tbAiBtn').addEventListener('click', async () => {
   const btn  = document.getElementById('tbAiBtn');
-  const body = document.getElementById('tbAiBody');
-
-  /* Build profile from My Taint saved data */
-  const profile = {
-    city      : city().name,
-    commute   : mtSaved?.commute  || null,
-    workplace : mtSaved?.workplace || null,
-    home      : mtSaved?.home     || null,
-  };
-  const hasProfile = profile.commute || profile.home;
-
-  btn.textContent = '⏳ Analysing your carbon profile…';
-  btn.disabled    = true;
-  body.innerHTML  = '<div class="tb-ai-loading">Calling Claude AI…</div>';
-
-  const systemPrompt = `You are a carbon-reduction product advisor for Indian urban consumers.
-Given a user's carbon profile, recommend exactly 3 products from the list that will give the HIGHEST CO₂ reduction for that specific user.
-Return ONLY a JSON array of 3 objects: [{"rank":1,"id":"product_id","name":"product name","why":"1-sentence reason specific to their profile, mentioning the kg CO₂ they'd save"}]
-No extra text, no markdown, no explanation outside the JSON.`;
-
-  const userMsg = hasProfile
-    ? `My carbon profile — City: ${profile.city}.
-${profile.commute ? `Commute: ${profile.commute.mode} ${profile.commute.km}km/day, ${profile.commute.days} days/week.` : ''}
-${profile.home ? `Home: ${profile.home.occ} people, electricity ${(profile.home.elecT*1000).toFixed(0)}kg CO₂/yr, LPG ${(profile.home.lpgT*1000).toFixed(0)}kg CO₂/yr, diet ${document.getElementById('mtDiet')?.value||'vegetarian'}.` : ''}
-Available product IDs: ${TAINT_PRODUCTS.map(p=>p.id).join(', ')}.
-Pick the 3 that would most reduce MY specific footprint.`
-    : `Urban Indian consumer, city: ${profile.city}. No detailed profile yet — recommend the 3 highest-impact green products for a typical urban household from these IDs: ${TAINT_PRODUCTS.map(p=>p.id).join(', ')}.`;
-
-  try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method : 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body   : JSON.stringify({
-        model      : 'claude-sonnet-4-20250514',
-        max_tokens : 500,
-        system     : systemPrompt,
-        messages   : [{ role:'user', content: userMsg }]
-      })
-    });
-    const data  = await res.json();
-    const raw   = data.content?.find(b => b.type==='text')?.text || '[]';
-    const clean = raw.replace(/```json|```/g,'').trim();
-    const picks = JSON.parse(clean);
-
-    body.innerHTML = '<div class="tb-ai-picks">' +
-      picks.map(p => {
-        const prod = TAINT_PRODUCTS.find(x => x.id === p.id);
-        if (!prod) return '';
-        return `<div class="tb-ai-pick">
-          <span class="tb-ai-pick-num">#${p.rank}</span>
-          <img class="tb-ai-pick-img" src="${tbProductImage(prod)}" alt="${prod.name}" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">
-          <div class="tb-ai-pick-body">
-            <div class="tb-ai-pick-name">${p.name || prod.name}</div>
-            <div class="tb-ai-pick-why">${p.why}</div>
-          </div>
-        </div>`;
-      }).join('') + '</div>';
-    btn.textContent = 'Refresh Picks';
-    btn.disabled    = false;
-  } catch (err) {
-    body.innerHTML = '<div class="tb-ai-hint" style="color:var(--amber)">Could not load AI recommendations. Showing all products below.</div>';
-    btn.textContent = 'Get My Picks';
-    btn.disabled    = false;
-  }
+  btn.textContent = 'Analysing your carbon profile...';
+  btn.disabled = true;
+  const profile = tbBuildUserCalculationProfile();
+  tbRenderCalculationPicks(profile);
+  btn.textContent = 'Refresh Picks';
+  btn.disabled = false;
 });
 
 /* Initialise grid on first show */
 let tbInitialised = false;
 function tbInit() {
+  if (!requireSignedInForAction('buy')) return;
   if (tbInitialised) return;
   tbInitialised = true;
   tbApplyFilter();
+  tbRenderCalculationPicks(tbBuildUserCalculationProfile());
 }
