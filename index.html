@@ -37,7 +37,7 @@
 ╚══════════════════════════════════════════════════════════════════════════════╝
 -->
 <meta charset="UTF-8"/>
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://api.anthropic.com https://nominatim.openstreetmap.org https://router.project-osrm.org https://api.waqi.info https://api.open-meteo.com https://*.supabase.co https://formsubmit.co https://server.arcgisonline.com; form-action 'self' https://formsubmit.co; frame-src 'none'; worker-src 'none'; object-src 'none'; base-uri 'self';">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://nominatim.openstreetmap.org https://router.project-osrm.org https://api.waqi.info https://api.open-meteo.com https://*.supabase.co https://formsubmit.co https://server.arcgisonline.com; form-action 'self' https://formsubmit.co; frame-src 'self' blob: data:; worker-src 'none'; object-src 'none'; base-uri 'self';">
 
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
 <title>TAINT — Carbon Emissions Calculator</title>
@@ -49,10 +49,10 @@
 <script src="./vendor/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="./assets/js/leaflet-popup-sanitize.js?v=20260527" defer></script>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700&family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet"/>
-<!-- Supabase used for global stats (no SDK needed — plain fetch) -->
+<!-- Supabase used for Auth and persistence. -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.106.1/dist/umd/supabase.min.js" integrity="sha384-dzQgxMPp/h+N0t5qDf6Bp516wKZr3pXgGMpA7/ZM6tiWkqYo90N060L03dxnZ8Tf" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
 
-<link rel="stylesheet" href="./assets/css/app.css?v=20260601-prod-branding"/>
+<link rel="stylesheet" href="./assets/css/app.css?v=20260605-db-report-ui"/>
 
 </head>
 <body>
@@ -71,11 +71,15 @@
     <!-- Brand -->
     <a class="logo" href="#" aria-label="TAINT home">
       <img class="logo-mark" src="./assets/logo1.png" alt="">
-      <span class="logo-text"><span class="logo-name">TAINT</span><span class="logo-city" id="logoCity">Chennai</span></span>
+      <span class="logo-text">
+        <span class="logo-primary"><span class="logo-name">TAINT</span><span class="logo-product">Carbon Emissions Calculator</span></span>
+        <span class="logo-tagline">Taint the Great Job Carefully!</span>
+        <span class="logo-city" id="logoCity">Chennai</span>
+      </span>
     </a>
 
     <!-- Live clock -->
-    <div class="clock-pill" id="clockPill">
+    <div class="clock-pill" id="clockPill" hidden aria-hidden="true">
       <span class="clock-dot"></span>
       <strong id="cTime">--:--:--</strong>
       <span id="cDay">---</span>
@@ -83,7 +87,7 @@
     </div>
 
     <!-- Live temperature (Open-Meteo, no key) -->
-    <div class="temp-chip" id="tempChip" title="Current temperature">
+    <div class="temp-chip" id="tempChip" title="Current temperature" hidden aria-hidden="true">
       <span>🌡️</span>
       <span class="tv" id="tempVal">—</span>
       <span id="tempUnit">°C</span>
@@ -91,7 +95,7 @@
     </div>
 
     <!-- Air quality index -->
-    <div class="aqi-chip" id="aqiChip" title="Air Quality Index">
+    <div class="aqi-chip" id="aqiChip" title="Air Quality Index" hidden aria-hidden="true">
       <span id="aqiEmoji">🌫️</span>
       <span>AQI</span>
       <span class="av" id="aqiVal">—</span>
@@ -101,12 +105,12 @@
     <!-- Language & country -->
     <div class="lang-chip" title="Website language and target region">
       <span>🇮🇳</span>
-      <span>Tamil · English</span>
+      <span>English</span>
       <span style="opacity:.5;font-size:10px">· India</span>
     </div>
 
     <!-- Dark / light theme toggle -->
-    <button class="theme-btn" id="themeBtn">🌙 Dark</button>
+    <button class="theme-btn" id="themeBtn" hidden aria-hidden="true">🌙 Dark</button>
     <div class="account-controls">
       <button class="user-avatar-btn" id="userAvatarBtn" title="Sign in / Account" aria-label="User account">
         <span id="userAvatarInitial">GU</span>
@@ -115,9 +119,29 @@
         <span></span><span></span><span></span>
       </button>
       <div class="account-menu" id="accountMenu" role="menu" aria-label="Account details">
-        <div class="account-menu-title" id="accountMenuName">Guest</div>
+        <div class="account-menu-title" id="accountMenuName">Signed out</div>
         <div class="account-menu-email" id="accountMenuEmail">Not signed in</div>
         <div class="account-menu-meta" id="accountMenuProvider">Local browser</div>
+        <button class="account-menu-action" id="accountPrefsBtn" type="button" aria-expanded="false" aria-controls="accountPreferences">Settings - Preferences</button>
+        <div class="account-preferences" id="accountPreferences" hidden>
+          <div class="account-pref-section">
+            <div class="account-pref-title">Preferences</div>
+            <p>Manage first-party storage used for calculations, profile state and cookie acknowledgement.</p>
+            <div class="account-pref-actions">
+              <button type="button" id="prefCookieNecessaryBtn">Necessary only</button>
+              <button type="button" id="prefCookieAcceptBtn">Accept all</button>
+              <button type="button" id="prefCookieClearBtn">Clear</button>
+            </div>
+          </div>
+          <div class="account-pref-section">
+            <div class="account-pref-title">Theme</div>
+            <p>Choose the display mode for this workspace.</p>
+            <div class="account-pref-actions two">
+              <button type="button" id="prefThemeDark">Dark</button>
+              <button type="button" id="prefThemeLight">Light</button>
+            </div>
+          </div>
+        </div>
         <button class="account-menu-action" id="accountDetailsBtn" type="button">Account details</button>
         <button class="account-menu-action danger" id="accountLogoutBtn" type="button">Logout</button>
       </div>
@@ -125,6 +149,22 @@
 
   </div>
 </nav>
+
+<section class="welcome-card" id="welcomeCard" aria-live="polite">
+  <div class="welcome-copy">
+    <div class="welcome-kicker" id="welcomeLoginTime">Session starting...</div>
+    <h2><span id="welcomeGreeting">Good day</span>, <span id="welcomeUserName">User</span></h2>
+    <p id="welcomeMessage">Your TAINT workspace is ready for city commute, home, workplace, and purchase footprint accounting.</p>
+  </div>
+  <div class="welcome-side">
+    <div class="welcome-time-card" aria-label="Session date and time">
+      <span class="welcome-time-label">Today</span>
+      <b id="welcomeTime">--:--:--</b>
+      <span id="welcomeDay">---</span>
+      <span id="welcomeDate">-- --- ----</span>
+    </div>
+  </div>
+</section>
 
 <!-- ═══════════════════════════════════════════════
      PAGE WRAPPER — max-width centred column
@@ -137,14 +177,12 @@
     <div class="sb-cities" id="sbCities"></div>
     <div class="sb-label" style="margin-top:16px">Mode</div>
     <nav class="sb-modes" id="sbModes"></nav>
-    <div class="sb-weather" id="sbWeather"></div>
-    <div class="sb-mini-stats" id="sbMiniStats"></div>
     <!-- User state at bottom of sidebar -->
     <div class="sb-user" id="sbUser">
       <div class="sb-user-row" id="sbUserRow">
         <div class="sb-avatar" id="sbAvatar">GU</div>
         <div class="sb-user-info">
-          <div class="sb-user-name" id="sbUserName">Guest</div>
+          <div class="sb-user-name" id="sbUserName">Signed out</div>
           <button class="sb-user-action" id="sbUserAction">Sign In</button>
         </div>
       </div>
@@ -157,12 +195,12 @@
   <div class="header">
     <div class="badge-row">
       <span class="badge">🌿 India · Multi-city</span>
-      <span class="aqi-badge" id="aqiBadge">🌫️ AQI checking…</span>
-      <span class="aqi-badge" id="tempBadge">🌡️ fetching temp…</span>
+      <span class="aqi-badge" id="aqiBadge" hidden aria-hidden="true">AQI checking...</span>
+      <span class="aqi-badge" id="tempBadge" hidden aria-hidden="true">Fetching temp...</span>
     </div>
-    <h1>Carbon Emissions Calculator</h1>
-    <p class="slogan">Taint the Great Job Carefully!</p>
-    <p class="header-sub">Scientific methodology from CEA, ICCT, IPCC &amp; MoRTH. Live fuel prices · OSM routing · Real-time AQI &amp; weather.</p>
+    <h1 hidden>Carbon Emissions Calculator</h1>
+    <p class="slogan" hidden>Taint the Great Job Carefully!</p>
+    <p class="header-sub" hidden>Scientific methodology from CEA, ICCT, IPCC &amp; MoRTH. Live fuel prices · OSM routing · Real-time AQI &amp; weather.</p>
   </div>
 
   <!-- ── GLOBAL STATS ── -->
@@ -206,7 +244,7 @@
     <button class="mode-tab"        id="modeWorkplace" data-mode="workplace">🏢 My Workplace</button>
     <button class="mode-tab"        id="modeHome"      data-mode="home">🏠 My Home</button>
     <button class="mode-tab"        id="modeTaint"     data-mode="taint">🌿 My Taint</button>
-    <button class="mode-tab"        id="modeBuy"       data-mode="buy">🛒 Taint Buy</button>
+    <button class="mode-tab"        id="modeBuy"       data-mode="buy" data-signed-in-only="true" hidden>🛒 Taint Buy</button>
     <button class="mode-tab"        id="modeAdmin"     data-mode="admin" data-admin-only="true" hidden>Taint Admin</button>
   </div>
 
@@ -247,10 +285,18 @@
       <button class="swap-btn" id="swapBtn" title="Swap locations">⇅ Swap</button>
       <button class="live-track-btn" id="ltToggleBtn">🚦 Track Live Journey</button>
       <span class="route-map-hint" id="routeMapHint">🖱️ Or click the map to pin From / To</span>
+      <div class="route-view-tabs" role="tablist" aria-label="Route workspace">
+        <button class="route-view-tab active" id="routeMapTab" type="button" role="tab" aria-selected="true" data-route-view="map">Map</button>
+        <button class="route-view-tab" id="routeLiveTab" type="button" role="tab" aria-selected="false" data-route-view="live">Live journey</button>
+      </div>
     </div>
 
-    <!-- Live Journey Tracker (expands below swap row) -->
-    <div class="lt-card" id="ltCard">
+    <!-- Live Journey Tracker (switches with route map) -->
+    <div class="lt-card route-view-panel" id="ltCard" data-route-view-panel="live" hidden>
+      <div class="route-floating-toggle" role="tablist" aria-label="Map and tracking view">
+        <button class="route-view-tab" type="button" role="tab" aria-selected="false" data-route-view="map">Map</button>
+        <button class="route-view-tab active" type="button" role="tab" aria-selected="true" data-route-view="live">Tracking</button>
+      </div>
       <!-- Status bar -->
       <div class="lt-status-bar">
         <span class="lt-status-dot" id="ltDot"></span>
@@ -311,7 +357,11 @@
     </div>
 
     <!-- Route map -->
-    <div id="routeMapWrap">
+    <div id="routeMapWrap" class="route-view-panel active" data-route-view-panel="map">
+      <div class="route-floating-toggle" role="tablist" aria-label="Map and tracking view">
+        <button class="route-view-tab active" type="button" role="tab" aria-selected="true" data-route-view="map">Map</button>
+        <button class="route-view-tab" type="button" role="tab" aria-selected="false" data-route-view="live">Tracking</button>
+      </div>
       <div id="routeMap"></div>
     </div>
 
@@ -412,7 +462,11 @@
   </div>
 
   <!-- ── EMISSIONS OUTPUT ── -->
-  <button class="wp-calc-btn compact-calc" id="commuteCalcBtn" style="margin-bottom:8px">Save Commute Result</button>
+  <div class="calc-actions">
+    <button class="wp-calc-btn compact-calc" id="commuteCalcBtn">Save Commute Result</button>
+    <button class="reset-action-btn" id="commuteResetBtn" type="button">Reset</button>
+    <button class="reset-action-btn" id="commutePdfBtn" type="button">Export PDF</button>
+  </div>
 
   <div class="card">
     <div class="card-title">Emissions output</div>
@@ -446,11 +500,11 @@
   </div>
 
   <!-- ══════════════════════════════════════════════════
-       CITY VISION — Satellite + Smog Proxy
+       CITY VISION — Satellite + Environmental Impact Proxy
        LEFT  : Real Chennai satellite imagery via ESRI
                World Imagery (free · no key · instant)
        RIGHT : synced satellite view with an aerosol haze proxy
-               scaled by calculated CO₂, fuel, and PUC status
+               scaled by calculated CO₂, fuel, PUC status, and route intensity
        ══════════════════════════════════════════════════ -->
   <div class="card recent-card" id="commuteHistoryCard">
     <div class="card-title">Recent Commute Calculations <span class="recent-meta" id="commuteRecentMeta">latest 5</span></div>
@@ -461,11 +515,12 @@
   </div>
 
   <div class="card" id="cityVisionCard">
-    <div class="card-title">City vision — Satellite vs Smog Proxy</div>
+    <div class="card-title">City vision — Satellite vs Environmental Impact Proxy</div>
     <p class="vision-intro">
       <strong>Left</strong>: Real <span id="visionCityName">Chennai</span> satellite imagery (ESRI World Imagery).
-      <strong>Right</strong>: a scientifically bounded haze proxy based on commute CO₂, fuel type,
-      tailpipe status, and local-pollutant co-emission risk. It is a visual model, not measured AQI.
+      <strong>Right</strong>: a scientifically bounded environmental impact proxy based on commute CO₂,
+      fuel type, tailpipe status, route corridors, and local-pollutant co-emission risk. It is a relative
+      visual model, not measured AQI or an actual smog prediction.
     </p>
 
     <!-- Emission intensity meter -->
@@ -487,10 +542,10 @@
     <div id="genCta" style="display:none">
       <button class="gen-btn" id="genBtn">
         <span id="genBtnIcon">↻</span>
-        <span id="genBtnText">Apply Smog Proxy</span>
+        <span id="genBtnText">Apply Impact Proxy</span>
       </button>
       <div style="font-size:11px;color:var(--hi);text-align:center;margin-top:5px">
-        Real satellite imagery · aerosol-style haze proxy · no generative image service
+        Real satellite imagery · route-weighted impact proxy · no generative image service
       </div>
     </div>
 
@@ -527,10 +582,10 @@
         </div>
       </div>
 
-      <!-- RIGHT: Canvas copy + CSS filter + smog overlay per emission level -->
+      <!-- RIGHT: synced map + CSS filter + route/corridor impact overlay per emission level -->
       <div class="vision-panel">
         <div class="vision-label-row">
-          <span class="vision-label">Smog proxy from this trip</span>
+          <span class="vision-label">Relative impact visualization</span>
           <span class="vs-pill" id="vsPollBadge">Calculate above ↑</span>
         </div>
         <div class="img-frame" style="position:relative;min-height:320px">
@@ -542,19 +597,19 @@
           </div>
         </div>
         <div class="vision-stats">
-          <span class="vs-pill" id="vsAqiPill">Local pollutant proxy…</span>
-          <span class="vs-pill" id="vsSmogPill">Haze level…</span>
+          <span class="vs-pill" id="vsAqiPill">Relative pollutant proxy...</span>
+          <span class="vs-pill" id="vsSmogPill">Impact level...</span>
         </div>
         <div style="font-size:10.5px;color:var(--hi);margin-top:6px;line-height:1.5">
-          Same satellite map with aerosol-style desaturation, brightness loss, and haze overlay. CO₂ is used as an activity proxy; fuel and PUC status adjust local-smog intensity.
+          Same satellite map with corridor-weighted haze and route plume overlays. CO₂ is used as an activity proxy; fuel and PUC status adjust relative local-pollutant intensity.
         </div>
       </div>
     </div>
     <!-- Prompt inspection -->
     <details id="promptDetails" style="display:none;margin-top:.75rem">
-      <summary style="font-size:12px;color:var(--mu)">View smog proxy method</summary>
+      <summary style="font-size:12px;color:var(--mu)">View impact proxy method</summary>
       <div style="margin-top:8px">
-        <div style="font-size:10px;color:var(--hi);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">Smog proxy method</div>
+        <div style="font-size:10px;color:var(--hi);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">Environmental impact proxy method</div>
         <div class="prompt-box" id="promptPolluted"></div>
       </div>
     </details>
@@ -572,20 +627,20 @@
         <div class="vc-unit">trees × 1 year</div>
       </div>
       <div class="vc-item">
-        <div class="vc-lbl">Local pollutant proxy</div>
+        <div class="vc-lbl">Relative pollutant proxy</div>
         <div class="vc-val" id="vcAqi">—</div>
-        <div class="vc-unit">index points added</div>
+        <div class="vc-unit">model index points</div>
       </div>
       <div class="vc-item">
-        <div class="vc-lbl">Visibility loss</div>
+        <div class="vc-lbl">Visual haze proxy</div>
         <div class="vc-val" id="vcVis">—</div>
-        <div class="vc-unit">% vs clear satellite day</div>
+        <div class="vc-unit">% conceptual overlay strength</div>
       </div>
     </div>
 
     <p style="font-size:10.5px;color:var(--hi);margin-top:.75rem;line-height:1.5">
       📡 Satellite imagery: <a href="https://www.esri.com/en-us/arcgis/products/arcgis-world-imagery" target="_blank" rel="noopener" style="color:var(--blue)">ESRI World Imagery</a> (free, public).
-      Smog proxy: qualitative aerosol haze model using trip activity, fuel type, and PUC status. It is not a measured air-quality forecast.
+      Environmental impact proxy: qualitative aerosol-style visualization using trip activity, fuel type, PUC status, and route/corridor intensity. One commute cannot visibly change city smog; this is not measured AQI or a forecast.
     </p>
   </div>
   <!-- ── FUEL COST COMPARISON ── -->
@@ -617,17 +672,6 @@
     <div class="price-updated" id="priceUpdated"></div>
   </div>
 
-  <!-- ── MONTHLY USAGE TRACKER ── -->
-  <div class="card">
-    <div class="card-title">My usage tracker — this device</div>
-    <div class="month-chart" id="monthChart"></div>
-    <div class="month-lbls" id="monthLbls"></div>
-    <div class="tracker-foot">
-      <span>Total calculations: <strong id="totalLocal">0</strong> <span id="firstSeenLbl" style="font-size:11px"></span></span>
-      <button class="reset-btn" id="resetBtn" title="Restore calculator defaults and clear local usage counters">Reset defaults</button>
-    </div>
-  </div>
-
   </div><!-- /commuteSection -->
 
   <!-- ════════════════════════════════════════════
@@ -637,24 +681,7 @@
 
   <div class="card">
     <div class="card-title">Taint Admin overview <span class="admin-owner-pill" id="adminAccessState">Owner only</span></div>
-    <div class="admin-metrics">
-      <div class="admin-metric">
-        <div class="admin-metric-label">Unique users</div>
-        <div class="admin-metric-val" id="adminUsers">—</div>
-        <div class="admin-metric-sub" id="adminUsersLbl">waiting for stats</div>
-      </div>
-      <div class="admin-metric">
-        <div class="admin-metric-label">Calculation count</div>
-        <div class="admin-metric-val" id="adminCalcs">—</div>
-        <div class="admin-metric-sub" id="adminCalcsLbl">all time</div>
-      </div>
-      <div class="admin-metric">
-        <div class="admin-metric-label">This month</div>
-        <div class="admin-metric-val" id="adminMonth">0</div>
-        <div class="admin-metric-sub">on this device</div>
-      </div>
-    </div>
-    <div class="admin-note">Admin mode contains technical factors, scientific references, and source audit notes. Hosting instructions are intentionally kept out of the app UI and remain in the repository docs.</div>
+    <div class="admin-note">Admin mode contains technical factors, scientific references, source audit notes, and the City Vision proxy. Operational hosting instructions stay in the repository docs.</div>
   </div>
 
   <div class="card admin-layer-card">
@@ -662,8 +689,8 @@
     <div class="admin-env-row">
       <span>Environment</span>
       <b id="adminEnvName">dev</b>
-      <span id="adminEnvProject">Supabase dev project</span>
-      <span id="adminEnvSite">GitHub Pages dev site</span>
+      <span id="adminEnvProject">Data project</span>
+      <span id="adminEnvSite">Site endpoint</span>
     </div>
     <div class="layer-grid">
       <div class="layer-tile presentation">
@@ -676,11 +703,11 @@
       </div>
       <div class="layer-tile persistence">
         <b>Persistence</b>
-        <span>First-party guest cookie, localStorage fallback, Supabase Auth, and queued writes.</span>
+        <span>First-party cookies, browser storage fallback, cloud authentication, and queued writes.</span>
       </div>
       <div class="layer-tile data">
         <b>Data</b>
-        <span>Supabase tables, RPCs, JSON artifacts, media buckets, process logs, and scientific references.</span>
+        <span>Private tables, RPCs, JSON artifacts, media buckets, process logs, and scientific references.</span>
       </div>
     </div>
   </div>
@@ -754,25 +781,7 @@
         <div class="gap-item"><b>Gap fixed:</b> grid electricity now cites CEA's CO₂ Baseline Database instead of a state utility-only note, so EV and rail factors have an India power-sector source.</div>
         <div class="gap-item"><b>Gap fixed:</b> vehicle comparisons cite ICCT's India life-cycle work and IPCC AR6 transport context instead of relying only on raw table factors.</div>
         <div class="gap-item"><b>Gap fixed:</b> PUC is treated as a maintenance and tailpipe-pollutant proxy. It is not used as a direct CO₂ instrument.</div>
-        <div class="gap-item warn"><b>Remaining approximation:</b> city fleet mix, live congestion emissions, real AQI chemistry, and satellite-smog visuals are modeled estimates. Admin factors should be recalibrated when verified city fleet or remote-sensing data is available.</div>
-      </div>
-    </details>
-  </div>
-
-  <!-- ── HOSTING GUIDE ── -->
-  <div class="card" hidden aria-hidden="true">
-    <details>
-      <summary>How to host this page &amp; enable global stats</summary>
-      <div class="host-steps">
-        <div class="host-step"><span class="hn">1</span><div>Test locally over HTTP, not <code style="color:var(--blue);font-family:'DM Mono',monospace">file://</code>, so Supabase Auth redirects and browser storage behave like production.<div class="code-blk">python -m http.server 8787</div><div class="code-blk">http://127.0.0.1:8787/index.html</div></div></div>
-        <div class="host-step"><span class="hn">2</span><div>Deploy the static site from this repository:<div class="code-blk">GitHub Pages: Settings → Pages → Deploy from branch → main / root</div><div class="code-blk">Netlify: drag &amp; drop this folder or connect the GitHub repo</div><div class="code-blk">Vercel: import the GitHub repo as a static project</div></div></div>
-        <div class="host-step"><span class="hn">3</span><div>
-          Create a free Supabase project for global tracking:<br>
-          <div class="code-blk">supabase.com → New project → SQL Editor → run setup SQL → paste URL + anon/publishable key</div>
-        </div></div>
-        <div class="host-step"><span class="hn">4</span><div>Paste your Project URL and anon/publishable key into <code style="color:var(--blue);font-family:'DM Mono',monospace">supabase-config.js</code>.</div></div>
-        <div class="host-step"><span class="hn">5</span><div>Run <code style="color:var(--blue);font-family:'DM Mono',monospace">taint_supabase_schema.sql</code>, <code style="color:var(--blue);font-family:'DM Mono',monospace">supabase_business_storage_migration.sql</code>, <code style="color:var(--blue);font-family:'DM Mono',monospace">supabase_sensitive_data_encryption.sql</code>, and both advisor follow-up SQL files in Supabase SQL Editor.</div></div>
-        <div class="host-step"><span class="hn">6</span><div>In Supabase Authentication → URL Configuration, set the Site URL and Redirect URLs to your hosted domain. Enable Google, GitHub, or enterprise SSO in Authentication → Providers only when those buttons should appear.</div></div>
+        <div class="gap-item warn"><b>Remaining approximation:</b> city fleet mix, live congestion emissions, real AQI chemistry, and satellite-impact visuals are modeled estimates. Admin factors should be recalibrated when verified city fleet or remote-sensing data is available.</div>
       </div>
     </details>
   </div>
@@ -927,7 +936,7 @@
 
   <!-- WP7: Team Commute -->
   <div class="card">
-    <div class="card-title">🚌 Team Commute <span class="wp-per">(aggregate)</span></div>
+    <div class="card-title team-commute-title">🚌 Team Commute <span class="wp-per">(aggregate)</span></div>
     <div class="fg-grid">
       <div class="fg"><label>Employees commuting to office daily</label>
         <input type="number" id="wpCommuters" min="0" value="40" placeholder="40"/></div>
@@ -952,12 +961,15 @@
   </div>
 
   <!-- WP Calculate button -->
-  <button class="wp-calc-btn" id="wpCalcBtn">Calc Workplace</button>
+  <div class="calc-actions">
+    <button class="wp-calc-btn" id="wpCalcBtn">Calc Workplace</button>
+    <button class="reset-action-btn" id="wpResetBtn" type="button">Reset</button>
+  </div>
 
   <!-- WP Results -->
   <div class="card" id="wpResultCard" style="display:none">
     <div class="card-title">📊 Workplace Carbon Footprint
-      <button class="wp-export-btn" id="wpExportBtn">📥 Export Report</button>
+      <button class="wp-export-btn" id="wpExportBtn">📥 Export PDF</button>
     </div>
 
     <!-- Headline number -->
@@ -1274,12 +1286,15 @@
   </div>
 
   <!-- HM Calculate -->
-  <button class="wp-calc-btn" id="hmCalcBtn">Calc Home</button>
+  <div class="calc-actions">
+    <button class="wp-calc-btn" id="hmCalcBtn">Calc Home</button>
+    <button class="reset-action-btn" id="hmResetBtn" type="button">Reset</button>
+  </div>
 
   <!-- HM Results -->
   <div class="card" id="hmResultCard" style="display:none">
     <div class="card-title">📊 Home Carbon Footprint
-      <button class="wp-export-btn" id="hmExportBtn">📥 Export Report</button>
+      <button class="wp-export-btn" id="hmExportBtn">📥 Export PDF</button>
     </div>
 
     <!-- Hero -->
@@ -1556,12 +1571,13 @@
     </div>
 
     <!-- Export whole profile -->
-    <button class="wp-calc-btn" id="mtExportBtn" style="margin-top:4px">📥 Export My Full Carbon Profile</button>
+    <button class="wp-calc-btn" id="mtExportBtn" style="margin-top:4px">📥 Export My PDF</button>
   </div>
 
   <!-- Wizard navigation -->
   <div class="mt-action-row" id="mtCalcAction" hidden>
     <button class="wp-calc-btn compact-calc" id="mtCalcBtn">Calculate My Taint</button>
+    <button class="reset-action-btn" id="mtResetBtn" type="button">Reset</button>
   </div>
   <div class="mt-nav">
     <button class="mt-nav-btn prev" id="mtPrevBtn" disabled>← Previous</button>
@@ -1594,7 +1610,7 @@
   <!-- AI Recommendations strip -->
   <div class="card tb-ai-card" id="tbAiCard">
     <div class="card-title">Recommended for You
-      <span class="tb-ai-badge">AI-powered</span>
+      <span class="tb-ai-badge">Calculation-based</span>
     </div>
     <div class="tb-ai-body" id="tbAiBody">
       <div class="tb-ai-hint">Complete <strong>My Taint</strong> first to get personalised picks based on your biggest carbon sources.</div>
@@ -1649,7 +1665,7 @@
         <b>Affiliate links</b>
         <span>Clicking "Buy on Amazon" or "Buy on Flipkart" adds our affiliate tag to the URL. You pay the same price — the retailer shares a small commission with us (2–12%).</span>
       </div>
-      <div class="tb-how-item">
+      <div class="tb-how-item" hidden>
         <span class="tb-how-icon">Brand</span>
         <b>Brand partnerships</b>
         <span>Some brands (EVs, solar) offer referral bonuses for qualified leads. We disclose these on each card. No sponsored placement — ranking is always by CO₂ saved.</span>
@@ -1664,6 +1680,9 @@
 
 
   <!-- ── TAINT CONTACT ── -->
+
+  </div><!-- /buySection -->
+
   <div class="card tc-card">
     <div class="card-title">📬 Contact</div>
     <div class="tc-grid">
@@ -1742,7 +1761,7 @@
           <div class="cs-title">Feedback from this device</div>
           <div id="fbList"><div class="fb-empty">No feedback yet.</div></div>
         </div>
-        <div class="fb-setup-hint">
+        <div class="fb-setup-hint" hidden>
           <b>📬 Setup:</b> Check <code style="font-size:11px;background:var(--s2);padding:1px 5px;border-radius:4px">taint.calculator@gmail.com</code> for a FormSubmit activation link on first use.
           <button class="fb-test-btn" id="fbTestBtn" style="margin-top:6px">🧪 Send Test Email</button>
           <span class="fb-test-result" id="fbTestResult"></span>
@@ -1750,14 +1769,6 @@
       </div>
 
     </div><!-- /tc-grid -->
-
-    <div class="cookie-panel" id="cookiePanel">
-      <div>
-        <b>Cookie use</b>
-        <span>This app stores only the first-party <code>taint_skip_auth</code> preference cookie for guest mode. GitHub Pages hosts the static app; it does not read GitHub account cookies or add tracking cookies.</span>
-      </div>
-      <button class="cookie-clear-btn" id="cookieClearBtn" type="button">Clear Cookie</button>
-    </div>
 
     <!-- Contact + data sources strip -->
     <div class="tc-footer">
@@ -1779,7 +1790,6 @@
   </div>
 
 
-  </div><!-- /buySection -->
 
   <!-- siteCarbonCard removed — now in Taint Contact within Taint Buy -->
   <div id="siteCarbonCard" style="display:none" aria-hidden="true"></div>
@@ -1812,15 +1822,16 @@
      Leave as-is to run in local-only mode (no global stats).
      ═══════════════════════════════════════════════ -->
 <script src="./supabase-config.js?v=20260601-prod-branding"></script>
-<script src="./assets/js/supabase-runtime-config.js?v=20260601-prod-branding" defer></script>
+<script src="./assets/js/supabase-runtime-config.js?v=20260605-db-report-ui" defer></script>
 
 <!-- ═══════════════════════════════════════════════
      MAIN APPLICATION SCRIPT
      ═══════════════════════════════════════════════ -->
-<script src="./assets/js/app.js?v=20260601-prod-branding" defer></script>
+<script src="./assets/js/app.js?v=20260605-db-report-ui" defer></script>
 <!-- ── AUTH OVERLAY ── -->
 <div class="auth-overlay hidden" id="authOverlay">
   <div class="auth-card" id="authCard">
+    <button class="auth-close-btn" id="authCloseBtn" type="button" aria-label="Close sign in">×</button>
     <div class="auth-brand">Carbon Calculator</div>
     <div class="auth-tagline">Track · Reduce · Act · <span style="color:var(--hi)">Carbon Calculator for India</span></div>
 
@@ -1840,14 +1851,24 @@
       </div>
       <div class="auth-field" id="authPasswordField">
         <label id="authPasswordLabel">Password</label>
-        <input type="password" id="authPassword" class="auth-input" placeholder="Minimum 8 characters" autocomplete="current-password" maxlength="72"/>
+        <div class="password-wrap">
+          <input type="password" id="authPassword" class="auth-input" placeholder="Minimum 8 characters" autocomplete="current-password" maxlength="72"/>
+          <button class="password-toggle" id="authPasswordToggle" type="button" aria-label="Show password" aria-pressed="false">
+            <span aria-hidden="true">👁</span>
+          </button>
+        </div>
       </div>
       <div class="auth-field" id="authConfirmPasswordField" style="display:none">
         <label>Confirm new password</label>
-        <input type="password" id="authConfirmPassword" class="auth-input" placeholder="Re-enter new password" autocomplete="new-password" maxlength="72"/>
+        <div class="password-wrap">
+          <input type="password" id="authConfirmPassword" class="auth-input" placeholder="Re-enter new password" autocomplete="new-password" maxlength="72"/>
+          <button class="password-toggle" id="authConfirmPasswordToggle" type="button" aria-label="Show password" aria-pressed="false">
+            <span aria-hidden="true">👁</span>
+          </button>
+        </div>
       </div>
-      <div class="auth-error" id="authError"></div>
-      <div class="auth-success" id="authSuccess" hidden></div>
+      <div class="auth-error" id="authError" role="alert" aria-live="assertive" hidden></div>
+      <div class="auth-success" id="authSuccess" role="status" aria-live="polite" hidden></div>
       <button class="auth-submit" id="authSubmit">Sign In</button>
       <div class="auth-help-row">
         <button class="auth-link-btn" id="authForgotBtn" type="button">Forgot password?</button>
@@ -1861,24 +1882,42 @@
       <svg width="18" height="18" viewBox="0 0 18 18" style="margin-right:8px"><path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.25-.164-1.84H9v3.48h4.844c-.209 1.125-.843 2.078-1.796 2.716v2.258h2.908c1.702-1.567 2.684-3.875 2.684-6.614z"/><path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"/><path fill="#FBBC05" d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z"/><path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 6.29C4.672 4.163 6.656 3.58 9 3.58z"/></svg>
       Continue with Google
     </button>
-    <button class="auth-google-btn" id="authGithub">Continue with GitHub</button>
+    <button class="auth-google-btn" id="authGithub">Continue with connected account</button>
     <div class="auth-provider-note" id="authProviderNote" hidden></div>
     <div class="auth-sso-row">
       <input type="text" id="authSsoDomain" class="auth-input" placeholder="company.com for SSO" autocomplete="organization"/>
       <button class="auth-sso-btn" id="authSsoBtn">SSO</button>
     </div>
 
-    <button class="auth-skip" id="authSkip">Continue as guest  →</button>
-
     <p class="auth-note">Your calculations run entirely in your browser. Sign in to sync your profile across devices. Confirmation and reset links are sent by email; passwords are never emailed.</p>
   </div>
 </div>
-<div class="cookie-consent hidden" id="cookieConsent" role="dialog" aria-live="polite" aria-label="Cookie notice">
-  <div>
-    <b>Cookie use</b>
-    <span>This app uses one first-party preference cookie for guest mode and this acknowledgement. No ads, no tracking, and no GitHub account cookies are read.</span>
+<div class="pdf-viewer hidden" id="pdfViewer" role="dialog" aria-modal="true" aria-label="PDF report viewer">
+  <div class="pdf-viewer-card">
+    <div class="pdf-viewer-head">
+      <img src="./assets/logo1.png" alt="TAINT" class="pdf-viewer-logo">
+      <div>
+        <b id="pdfViewerTitle">TAINT PDF report</b>
+        <span>Calculation report preview</span>
+      </div>
+      <button class="pdf-viewer-download" id="pdfViewerDownload" type="button">Download PDF</button>
+      <button class="pdf-viewer-close" id="pdfViewerClose" type="button" aria-label="Close PDF viewer">x</button>
+    </div>
+    <iframe id="pdfViewerFrame" title="TAINT calculation PDF preview"></iframe>
   </div>
-  <button type="button" id="cookieAcceptBtn">Accept</button>
+</div>
+
+<div class="cookie-consent hidden" id="cookieConsent" role="dialog" aria-live="polite" aria-label="Cookie notice">
+  <span class="cookie-consent-icon" aria-hidden="true">Cookie</span>
+  <div class="cookie-consent-copy">
+    <span>We use browser storage to save your calculations, preferences and profile. No third-party ad trackers.</span>
+  </div>
+  <div class="cookie-consent-actions">
+    <button type="button" id="cookieNecessaryBtn" class="cookie-secondary-btn">Necessary only</button>
+    <button type="button" id="cookieCustomizeBtn" class="cookie-secondary-btn">Customize</button>
+    <button type="button" id="cookieAcceptBtn" class="cookie-primary-btn">Accept All</button>
+    <a href="#accountPreferences" class="cookie-policy-link">Cookie Policy</a>
+  </div>
 </div>
 <div class="toast-region" id="toastRegion" aria-live="polite" aria-atomic="false"></div>
 
