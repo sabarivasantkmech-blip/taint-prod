@@ -9,7 +9,7 @@ const escapeHTML = value => String(value ?? '').replace(/[&<>"']/g, ch => ({
 // ──────────────────────────────────────────────────────
 
 /* Feedback email — replace with your address (FormSubmit.co) */
-const FEEDBACK_EMAIL = 'taint.calculator@gmail.com';
+const FEEDBACK_EMAIL = 'support@taintcarbon.in';
 
 /* AQI API token — free demo token; get your own at aqicn.org/api/ */
 const WAQI_TOKEN = 'demo';
