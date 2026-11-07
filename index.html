@@ -33,7 +33,7 @@
 ║                                                                             ║
 ║  AQI — replace WAQI_TOKEN='demo' with free token from aqicn.org/api/       ║
 ║  FEEDBACK — replace FEEDBACK_EMAIL with your email (FormSubmit.co)         ║
-║  CONTACT: taint.calculator@gmail.com                                        ║
+║  CONTACT: support@taintcarbon.in                                            ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
 -->
 <meta charset="UTF-8"/>
@@ -692,6 +692,11 @@
       <span id="adminEnvProject">Data project</span>
       <span id="adminEnvSite">Site endpoint</span>
     </div>
+    <div class="admin-concurrency-row" aria-label="Runtime multitasking status">
+      <span>Session <b id="adminSessionId">local</b></span>
+      <span>Writes <b id="adminConcurrency">0/6 running, 0 queued</b></span>
+      <span>Tasks <b id="adminWriteStats">0 done, 0 skipped</b></span>
+    </div>
     <div class="layer-grid">
       <div class="layer-tile presentation">
         <b>Presentation</b>
@@ -703,7 +708,7 @@
       </div>
       <div class="layer-tile persistence">
         <b>Persistence</b>
-        <span>First-party cookies, browser storage fallback, cloud authentication, and queued writes.</span>
+        <span>First-party cookies, browser storage fallback, cloud authentication, cross-tab sync, and parallel queued writes.</span>
       </div>
       <div class="layer-tile data">
         <b>Data</b>
@@ -1718,7 +1723,7 @@
       <!-- RIGHT: Feedback form -->
       <div class="tc-panel tc-feedback">
         <div class="tc-panel-title">Send Feedback</div>
-        <p class="tc-desc">Found a bug, have a suggestion, or want a new vehicle? Sent directly to <strong>taint.calculator@gmail.com</strong>.</p>
+        <p class="tc-desc">Found a bug, have a suggestion, or want a new vehicle? Sent directly to <strong>support@taintcarbon.in</strong>.</p>
         <form class="fb-form" id="fbForm" novalidate>
           <div class="fb-row">
             <div class="fb-grp">
@@ -1762,7 +1767,7 @@
           <div id="fbList"><div class="fb-empty">No feedback yet.</div></div>
         </div>
         <div class="fb-setup-hint" hidden>
-          <b>📬 Setup:</b> Check <code style="font-size:11px;background:var(--s2);padding:1px 5px;border-radius:4px">taint.calculator@gmail.com</code> for a FormSubmit activation link on first use.
+          <b>📬 Setup:</b> Check <code style="font-size:11px;background:var(--s2);padding:1px 5px;border-radius:4px">support@taintcarbon.in</code> for a FormSubmit activation link on first use.
           <button class="fb-test-btn" id="fbTestBtn" style="margin-top:6px">🧪 Send Test Email</button>
           <span class="fb-test-result" id="fbTestResult"></span>
         </div>
@@ -1773,7 +1778,7 @@
     <!-- Contact + data sources strip -->
     <div class="tc-footer">
       <div class="tc-contact">
-        <span>📧 <a href="mailto:taint.calculator@gmail.com">taint.calculator@gmail.com</a></span>
+        <span>📧 <a href="mailto:support@taintcarbon.in">support@taintcarbon.in</a></span>
         <span>·</span>
         <span style="color:var(--hi);font-size:12px">Data corrections · partnerships · media</span>
       </div>
@@ -1823,6 +1828,7 @@
      ═══════════════════════════════════════════════ -->
 <script src="./supabase-config.js?v=20260601-prod-branding"></script>
 <script src="./assets/js/supabase-runtime-config.js?v=20260605-db-report-ui" defer></script>
+<script src="./assets/js/factor-registry.js?v=20260610-factor-registry" defer></script>
 
 <!-- ═══════════════════════════════════════════════
      MAIN APPLICATION SCRIPT

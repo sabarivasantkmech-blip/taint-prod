@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
   pages: write
   id-token: write
 
@@ -32,6 +32,7 @@ jobs:
       - name: JavaScript syntax check
         run: |
           node --check assets/js/app.js
+          node --check assets/js/factor-registry.js
           node --check assets/js/supabase-runtime-config.js
 
       - name: Assert production config
