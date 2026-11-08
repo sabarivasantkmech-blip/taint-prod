@@ -10,6 +10,7 @@ const escapeHTML = value => String(value ?? '').replace(/[&<>"']/g, ch => ({
 
 /* Feedback email — replace with your address (FormSubmit.co) */
 const FEEDBACK_EMAIL = 'support@taintcarbon.in';
+const PROD_GUEST_MODE = !!SUPABASE_CONFIG.isProduction;
 
 /* AQI API token — free demo token; get your own at aqicn.org/api/ */
 const WAQI_TOKEN = 'demo';
@@ -1474,7 +1475,7 @@ function resetCommuteDefaults(options={}) {
   populateVehicles();
   updatePucUI();
   resetCityVisionState();
-  if (!isSignedInUser()) renderSignedOutCommuteState();
+  if (!isSignedInUser() && !PROD_GUEST_MODE) renderSignedOutCommuteState();
   if (options.notify !== false) notify('Commute defaults restored.', 'success', 'Reset');
 }
 
@@ -1849,7 +1850,7 @@ const RECENT_MODE_CONFIG = {
     table:'calculation_logs',
     select:'id,created_at,city_name,category,fuel,vehicle,distance_km,passengers,per_passenger_kg,result,raw_input',
     query:'calculation_type=eq.commute',
-    empty:'Sign in or calculate to see recent commute results.'
+    empty:'Calculate once to see recent results on this device.'
   },
   workplace: {
     localKey:'taint_recent_workplace_v1',
@@ -1859,7 +1860,7 @@ const RECENT_MODE_CONFIG = {
     table:'carbon_profiles',
     select:'id,created_at,city_name,total_tco2e,per_capita_tco2e,grade,inputs,results',
     query:'profile_type=eq.workplace',
-    empty:'Sign in or calculate to see recent workplace results.'
+    empty:'Calculate once to see recent results on this device.'
   },
   home: {
     localKey:'taint_recent_home_v1',
@@ -1869,7 +1870,7 @@ const RECENT_MODE_CONFIG = {
     table:'carbon_profiles',
     select:'id,created_at,city_name,total_tco2e,per_capita_tco2e,grade,inputs,results',
     query:'profile_type=eq.household',
-    empty:'Sign in or calculate to see recent home results.'
+    empty:'Calculate once to see recent results on this device.'
   },
   taint: {
     localKey:'taint_recent_my_taint_v1',
@@ -1879,7 +1880,7 @@ const RECENT_MODE_CONFIG = {
     table:'carbon_profiles',
     select:'id,created_at,city_name,total_tco2e,per_capita_tco2e,grade,inputs,results',
     query:'profile_type=eq.my_taint',
-    empty:'Sign in or calculate to see recent My Taint profiles.'
+    empty:'Calculate once to see recent results on this device.'
   },
   buy: {
     localKey:'taint_buy_history_v1',
@@ -2519,18 +2520,19 @@ function renderRecentCalculations(mode, incoming=null) {
   if (!cfg || !list || !chart) return;
   const signedIn = isSignedInUser();
   const cloudUser = isCloudRecentUser();
+  const localGuest = PROD_GUEST_MODE && !signedIn;
   const records = signedIn
     ? (incoming || (cloudUser ? (recentUiCache[mode] || []) : readLocalRecent(mode))).slice(0, RECENT_LIMIT)
-    : [];
+    : (localGuest ? readLocalRecent(mode).slice(0, RECENT_LIMIT) : []);
   if (incoming) recentUiCache[mode] = records;
   if (meta) {
-    const name = signedIn ? displayNameForGreeting(currentUser) : 'sign in';
-    meta.textContent = signedIn ? `${name} latest 5${cloudUser ? ' DB' : ''}` : 'sign in required';
+    const name = signedIn ? displayNameForGreeting(currentUser) : 'This device';
+    meta.textContent = signedIn ? `${name} latest 5${cloudUser ? ' DB' : ''}` : (localGuest ? 'This device' : 'sign in required');
   }
   if (!records.length) {
     const emptyText = signedIn
       ? (cloudUser ? 'No DB-saved calculations yet. Calculate once to save your latest 5 to your account.' : cfg.empty)
-      : 'Sign in to view your latest 5 saved calculations and PDF reports.';
+      : (localGuest ? cfg.empty : 'Sign in to view your latest 5 saved calculations and PDF reports.');
     list.innerHTML = `<div class="recent-empty">${emptyText}</div>`;
     chart.textContent = 'No trend yet';
     return;
@@ -2846,7 +2848,7 @@ let calcTimer;
 function scheduleCalc() { clearTimeout(calcTimer); calcTimer=setTimeout(calculate,180); }
 
 function calculate(options={}) {
-  if (!isSignedInUser()) {
+  if (!isSignedInUser() && !PROD_GUEST_MODE) {
     if (options.log) requireSignedInForAction('calculate');
     renderSignedOutCommuteState();
     return;
@@ -4487,8 +4489,7 @@ document.getElementById('ltUseBtn').addEventListener('click', () => {
 
 // ──────────────────────────────────────────────────────
 //  AUTH SYSTEM
-//  Supabase Auth when configured · local fallback otherwise
-//  Calculations require an authenticated user
+//  Supabase Auth when configured · production guests calculate locally
 // ──────────────────────────────────────────────────────
 
 let supabaseClient = null;
@@ -4507,6 +4508,7 @@ function isSignedInUser() {
 
 function requireSignedInForAction(action='calculate') {
   if (isSignedInUser()) return true;
+  if (PROD_GUEST_MODE && action === 'calculate') return true;
   const messages = {
     buy: 'Sign in is required to use Taint Buy.',
     calculate: 'Sign in is required to calculate and save your carbon footprint.'
@@ -5152,35 +5154,50 @@ function updateWelcomeCard(user) {
   setText('welcomeLoginTime', user ? `Signed in at ${timeText} on ${dateText}` : `Session ready at ${timeText} on ${dateText}`);
   setText('welcomeMessage', user
     ? `Your ${city().name} footprint workspace is ready. Recent calculations, trend history, and PDF exports will save to your account where storage is enabled.`
-    : `Sign in to calculate your ${city().name} carbon footprint, export PDFs, and view saved trend history.`);
+    : (PROD_GUEST_MODE
+      ? `Your ${city().name} footprint workspace is ready. Calculations and recent history stay in this browser.`
+      : `Sign in to calculate your ${city().name} carbon footprint, export PDFs, and view saved trend history.`));
 }
 
 function updateAuthUI(user) {
   const initial = userInitials(user);
   const name    = user ? (user.name||user.email.split('@')[0]) : 'Signed out';
   const email   = user ? user.email : 'Not signed in';
-  const provider= user ? (SUPABASE_CONFIG.isProduction ? 'Account' : `${user.provider || 'local'} account`) : 'Sign in required';
+  const provider= user ? (SUPABASE_CONFIG.isProduction ? 'Account' : `${user.provider || 'local'} account`) : (PROD_GUEST_MODE ? 'Local browser' : 'Sign in required');
   const isGuest = !user;
 
   const ab=document.getElementById('userAvatarBtn'),al=document.getElementById('userAvatarInitial');
-  if(ab&&al){ al.textContent=initial; ab.classList.toggle('signed-in',!isGuest); ab.title=isGuest?'Sign in':'Signed in as '+name; }
+  if(ab&&al){ al.textContent=initial; ab.classList.toggle('signed-in',!isGuest); ab.title=isGuest?'Preferences':'Signed in as '+name; }
 
   const sbAv=document.getElementById('sbAvatar'),sbNm=document.getElementById('sbUserName'),sbAct=document.getElementById('sbUserAction');
   if(sbAv)  sbAv.textContent=initial;
   if(sbNm)  sbNm.textContent=name;
-  if(sbAct){ sbAct.textContent=isGuest?'Sign In / Sign Up':'Sign Out'; sbAct.onclick=isGuest?showAuthOverlay:authSignOut; }
+  if(sbAct){ sbAct.textContent=isGuest?(PROD_GUEST_MODE?'':'Sign In / Sign Up'):'Sign Out'; sbAct.onclick=isGuest?showAuthOverlay:authSignOut; }
 
   const mn=document.getElementById('accountMenuName'),me=document.getElementById('accountMenuEmail'),mp=document.getElementById('accountMenuProvider');
   const details=document.getElementById('accountDetailsBtn'),logout=document.getElementById('accountLogoutBtn');
+  if (PROD_GUEST_MODE) {
+    document.querySelectorAll('[data-prod-auth-control]').forEach(el => {
+      if (isGuest) el.setAttribute('data-prod-auth-hidden', 'true');
+      else el.removeAttribute('data-prod-auth-hidden');
+    });
+  }
   if(mn) mn.textContent=name;
   if(me) me.textContent=email;
   if(mp) mp.textContent=provider;
-  if(details){ details.textContent=isGuest?'Sign in to view details':'Account details'; details.disabled=false; }
-  if(logout){ logout.textContent=isGuest?'Sign In / Sign Up':'Logout'; }
+  if(details){ details.textContent='Account details'; details.disabled=false; }
+  if(logout){ logout.textContent='Logout'; }
+  const menuButton=document.getElementById('accountMenuBtn');
+  if(menuButton) menuButton.setAttribute('aria-label', isGuest ? 'Preferences menu' : 'Account and preferences menu');
+  const menu=document.getElementById('accountMenu');
+  if(menu) menu.setAttribute('aria-label', isGuest ? 'Preferences' : 'Account details and preferences');
+  const prefsButton=document.getElementById('accountPrefsBtn');
+  if(prefsButton) prefsButton.textContent=isGuest ? 'Preferences' : 'Settings - Preferences';
   updateWelcomeCard(user);
   syncSignedInOnlyUI();
   if (user && typeof calculate === 'function') calculate();
-  if (!user && typeof renderSignedOutCommuteState === 'function') renderSignedOutCommuteState();
+  else if (PROD_GUEST_MODE && typeof calculate === 'function') calculate();
+  else if (typeof renderSignedOutCommuteState === 'function') renderSignedOutCommuteState();
   syncAdminVisibility();
   refreshAllRecentCalculations();
 }
@@ -5197,6 +5214,7 @@ function toggleAccountMenu() {
 
 function showAuthOverlay(mode){
   const requestedMode = typeof mode === 'string' ? mode : (authMode || 'signin');
+  if (PROD_GUEST_MODE && requestedMode !== 'forgot' && requestedMode !== 'reset') return;
   setAuthMode(requestedMode);
   updateAuthProviderUI();
   document.getElementById('authOverlay').classList.remove('hidden');
@@ -5594,7 +5612,10 @@ async function initAuth(){
     return;
   }
   if(hasSession){ sbUpsertProfile(currentUser); updateAuthUI(currentUser); hideAuthOverlay(); }
-  else { updateAuthUI(null); setTimeout(showAuthOverlay,700); }
+  else {
+    updateAuthUI(null);
+    if (!PROD_GUEST_MODE) setTimeout(showAuthOverlay,700);
+  }
 }
 
 // ──────────────────────────────────────────────────────
