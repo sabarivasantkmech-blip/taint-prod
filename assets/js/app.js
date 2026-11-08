@@ -1772,9 +1772,13 @@ async function sbPost(table, payload, kind='functional') {
   const authUserId = sbAuthUserId();
   if (SB_SIGNED_IN_DATA_TABLES.has(table) && !authUserId) return null;
   return enqueueWrite(async () => {
+    // Anonymous feedback is write-only under RLS, so do not request the inserted row.
+    const prefer = table === 'feedback_messages' && !authUserId
+      ? 'return=minimal'
+      : 'return=representation';
     const res = await appFetch(`${SUPABASE_CONFIG.url}/rest/v1/${table}`, {
       method : 'POST',
-      headers: { ...(await SB_AUTH_HEADERS()), 'Prefer':'return=representation' },
+      headers: { ...(await SB_AUTH_HEADERS()), Prefer:prefer },
       body   : JSON.stringify({
         device_id   : getOrCreateUID(),
         auth_user_id: authUserId,
