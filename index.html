@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="prod-auth-ui">
 <head>
 <!--
 ╔══════════════════════════════════════════════════════════════════════════════╗
@@ -52,7 +52,7 @@
 <!-- Supabase used for Auth and persistence. -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.106.1/dist/umd/supabase.min.js" integrity="sha384-dzQgxMPp/h+N0t5qDf6Bp516wKZr3pXgGMpA7/ZM6tiWkqYo90N060L03dxnZ8Tf" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
 
-<link rel="stylesheet" href="./assets/css/app.css?v=20260605-db-report-ui"/>
+<link rel="stylesheet" href="./assets/css/app.css?v=20261108-prod-guest-mode"/>
 
 </head>
 <body>
@@ -112,17 +112,17 @@
     <!-- Dark / light theme toggle -->
     <button class="theme-btn" id="themeBtn" hidden aria-hidden="true">🌙 Dark</button>
     <div class="account-controls">
-      <button class="user-avatar-btn" id="userAvatarBtn" title="Sign in / Account" aria-label="User account">
+      <button class="user-avatar-btn" id="userAvatarBtn" data-prod-auth-control data-prod-auth-hidden="true" title="User account" aria-label="User account">
         <span id="userAvatarInitial">GU</span>
       </button>
-      <button class="account-menu-btn" id="accountMenuBtn" type="button" aria-label="Account menu" aria-expanded="false" aria-controls="accountMenu">
+      <button class="account-menu-btn" id="accountMenuBtn" type="button" aria-label="Preferences menu" aria-expanded="false" aria-controls="accountMenu">
         <span></span><span></span><span></span>
       </button>
-      <div class="account-menu" id="accountMenu" role="menu" aria-label="Account details">
-        <div class="account-menu-title" id="accountMenuName">Signed out</div>
-        <div class="account-menu-email" id="accountMenuEmail">Not signed in</div>
-        <div class="account-menu-meta" id="accountMenuProvider">Local browser</div>
-        <button class="account-menu-action" id="accountPrefsBtn" type="button" aria-expanded="false" aria-controls="accountPreferences">Settings - Preferences</button>
+      <div class="account-menu" id="accountMenu" role="menu" aria-label="Preferences">
+        <div class="account-menu-title" id="accountMenuName" data-prod-auth-control data-prod-auth-hidden="true">Signed out</div>
+        <div class="account-menu-email" id="accountMenuEmail" data-prod-auth-control data-prod-auth-hidden="true">Not signed in</div>
+        <div class="account-menu-meta" id="accountMenuProvider" data-prod-auth-control data-prod-auth-hidden="true">Local browser</div>
+        <button class="account-menu-action" id="accountPrefsBtn" type="button" aria-expanded="false" aria-controls="accountPreferences">Preferences</button>
         <div class="account-preferences" id="accountPreferences" hidden>
           <div class="account-pref-section">
             <div class="account-pref-title">Preferences</div>
@@ -142,8 +142,8 @@
             </div>
           </div>
         </div>
-        <button class="account-menu-action" id="accountDetailsBtn" type="button">Account details</button>
-        <button class="account-menu-action danger" id="accountLogoutBtn" type="button">Logout</button>
+        <button class="account-menu-action" id="accountDetailsBtn" data-prod-auth-control data-prod-auth-hidden="true" type="button">Account details</button>
+        <button class="account-menu-action danger" id="accountLogoutBtn" data-prod-auth-control data-prod-auth-hidden="true" type="button">Logout</button>
       </div>
     </div>
 
@@ -178,7 +178,7 @@
     <div class="sb-label" style="margin-top:16px">Mode</div>
     <nav class="sb-modes" id="sbModes"></nav>
     <!-- User state at bottom of sidebar -->
-    <div class="sb-user" id="sbUser">
+    <div class="sb-user" id="sbUser" data-prod-auth-control data-prod-auth-hidden="true">
       <div class="sb-user-row" id="sbUserRow">
         <div class="sb-avatar" id="sbAvatar">GU</div>
         <div class="sb-user-info">
@@ -509,7 +509,7 @@
   <div class="card recent-card" id="commuteHistoryCard">
     <div class="card-title">Recent Commute Calculations <span class="recent-meta" id="commuteRecentMeta">latest 5</span></div>
     <div class="recent-layout">
-      <div class="recent-list" id="commuteRecentList"><div class="recent-empty">Sign in or calculate to see recent commute results.</div></div>
+      <div class="recent-list" id="commuteRecentList"><div class="recent-empty">Calculate once to see recent results on this device.</div></div>
       <div class="trend-chart" id="commuteTrendChart" aria-label="Commute trend chart"></div>
     </div>
   </div>
@@ -1036,7 +1036,7 @@
   <div class="card recent-card" id="workplaceHistoryCard">
     <div class="card-title">Recent Workplace Calculations <span class="recent-meta" id="workplaceRecentMeta">latest 5</span></div>
     <div class="recent-layout">
-      <div class="recent-list" id="workplaceRecentList"><div class="recent-empty">Sign in or calculate to see recent workplace results.</div></div>
+      <div class="recent-list" id="workplaceRecentList"><div class="recent-empty">Calculate once to see recent results on this device.</div></div>
       <div class="trend-chart" id="workplaceTrendChart" aria-label="Workplace trend chart"></div>
     </div>
   </div>
@@ -1380,7 +1380,7 @@
   <div class="card recent-card" id="homeHistoryCard">
     <div class="card-title">Recent Home Calculations <span class="recent-meta" id="homeRecentMeta">latest 5</span></div>
     <div class="recent-layout">
-      <div class="recent-list" id="homeRecentList"><div class="recent-empty">Sign in or calculate to see recent home results.</div></div>
+      <div class="recent-list" id="homeRecentList"><div class="recent-empty">Calculate once to see recent results on this device.</div></div>
       <div class="trend-chart" id="homeTrendChart" aria-label="Home trend chart"></div>
     </div>
   </div>
@@ -1588,7 +1588,7 @@
   <div class="card recent-card" id="taintHistoryCard">
     <div class="card-title">Recent My Taint Profiles <span class="recent-meta" id="taintRecentMeta">latest 5</span></div>
     <div class="recent-layout">
-      <div class="recent-list" id="taintRecentList"><div class="recent-empty">Sign in or calculate to see recent My Taint profiles.</div></div>
+      <div class="recent-list" id="taintRecentList"><div class="recent-empty">Calculate once to see recent results on this device.</div></div>
       <div class="trend-chart" id="taintTrendChart" aria-label="My Taint trend chart"></div>
     </div>
   </div>
@@ -1827,11 +1827,11 @@
 <!-- ═══════════════════════════════════════════════
      MAIN APPLICATION SCRIPT
      ═══════════════════════════════════════════════ -->
-<script src="./assets/js/app.js?v=20260605-db-report-ui" defer></script>
+<script src="./assets/js/app.js?v=20261108-prod-guest-mode" defer></script>
 <!-- ── AUTH OVERLAY ── -->
 <div class="auth-overlay hidden" id="authOverlay">
   <div class="auth-card" id="authCard">
-    <button class="auth-close-btn" id="authCloseBtn" type="button" aria-label="Close sign in">×</button>
+    <button class="auth-close-btn" id="authCloseBtn" type="button" aria-label="Close account dialog">×</button>
     <div class="auth-brand">Carbon Calculator</div>
     <div class="auth-tagline">Track · Reduce · Act · <span style="color:var(--hi)">Carbon Calculator for India</span></div>
 

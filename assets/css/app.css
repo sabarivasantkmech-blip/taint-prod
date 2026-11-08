@@ -1043,6 +1043,13 @@ html.light .welcome-time-card{background:rgba(255,255,255,.74);}
   padding:16px;
 }
 .auth-overlay.hidden{ display:none; }
+html.prod-auth-ui [data-prod-auth-hidden]{display:none!important;}
+html.prod-auth-ui .auth-tabs,
+html.prod-auth-ui .auth-or,
+html.prod-auth-ui .auth-google-btn,
+html.prod-auth-ui .auth-sso-row,
+html.prod-auth-ui .auth-help-row,
+html.prod-auth-ui .auth-note{display:none!important;}
 .auth-card{
   background:var(--surface);border:1px solid var(--bd2);border-radius:18px;
   padding:32px 28px;width:100%;max-width:400px;
