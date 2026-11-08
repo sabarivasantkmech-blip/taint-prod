@@ -52,7 +52,7 @@
 <!-- Supabase used for Auth and persistence. -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.min.js" integrity="sha384-gnyZit14c5lnGcarmA166QQjjJXpucw25ogZXuwH3HxxY904zHkBqmxVpelsPorb" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
 
-<link rel="stylesheet" href="./assets/css/app.css?v=20261108-prod-mobile-chip"/>
+<link rel="stylesheet" href="./assets/css/app.css?v=20261108-prod-feedback-rating"/>
 
 </head>
 <body>
@@ -104,7 +104,7 @@
 
     <!-- Language & country -->
     <div class="lang-chip" title="Website language and target region">
-      <span class="lang-flag" aria-hidden="true">🇮🇳</span>
+      <span class="lang-flag"><img class="lang-flag-image" src="./assets/flag-in.svg" alt="India flag" width="24" height="16" decoding="async"/></span>
       <span>English</span>
       <span style="opacity:.5;font-size:10px">· India</span>
     </div>
@@ -1560,10 +1560,12 @@
     <div class="card" id="mtFeedbackCard">
       <div class="card-title">💬 Share Your Feedback</div>
       <div id="mtFeedbackBody">
-        <div class="star-row" id="mtStarRow">
-          <span class="star" data-v="1">★</span><span class="star" data-v="2">★</span>
-          <span class="star" data-v="3">★</span><span class="star" data-v="4">★</span>
-          <span class="star" data-v="5">★</span>
+        <div class="star-row" id="mtStarRow" role="radiogroup" aria-label="Rate your experience">
+          <button class="star" type="button" data-v="1" role="radio" aria-checked="false" aria-label="1 out of 5 stars" title="1 star" tabindex="0">★</button>
+          <button class="star" type="button" data-v="2" role="radio" aria-checked="false" aria-label="2 out of 5 stars" title="2 stars" tabindex="-1">★</button>
+          <button class="star" type="button" data-v="3" role="radio" aria-checked="false" aria-label="3 out of 5 stars" title="3 stars" tabindex="-1">★</button>
+          <button class="star" type="button" data-v="4" role="radio" aria-checked="false" aria-label="4 out of 5 stars" title="4 stars" tabindex="-1">★</button>
+          <button class="star" type="button" data-v="5" role="radio" aria-checked="false" aria-label="5 out of 5 stars" title="5 stars" tabindex="-1">★</button>
         </div>
         <textarea id="mtFeedbackText" class="fb-textarea" placeholder="What could we improve?"></textarea>
         <button class="wp-calc-btn" id="mtFeedbackSubmit" style="margin-top:8px;padding:10px;font-size:13px">Submit Feedback</button>
@@ -1739,10 +1741,12 @@
           </div>
           <div class="fb-grp">
             <label>Rate this tool</label>
-            <div class="stars" id="starRow">
-              <span class="star" data-v="1">⭐</span><span class="star" data-v="2">⭐</span>
-              <span class="star" data-v="3">⭐</span><span class="star" data-v="4">⭐</span>
-              <span class="star" data-v="5">⭐</span>
+            <div class="stars" id="starRow" role="radiogroup" aria-label="Rate this tool">
+              <button class="star" type="button" data-v="1" role="radio" aria-checked="false" aria-label="1 out of 5 stars" title="1 star" tabindex="0">★</button>
+              <button class="star" type="button" data-v="2" role="radio" aria-checked="false" aria-label="2 out of 5 stars" title="2 stars" tabindex="-1">★</button>
+              <button class="star" type="button" data-v="3" role="radio" aria-checked="false" aria-label="3 out of 5 stars" title="3 stars" tabindex="-1">★</button>
+              <button class="star" type="button" data-v="4" role="radio" aria-checked="false" aria-label="4 out of 5 stars" title="4 stars" tabindex="-1">★</button>
+              <button class="star" type="button" data-v="5" role="radio" aria-checked="false" aria-label="5 out of 5 stars" title="5 stars" tabindex="-1">★</button>
             </div>
           </div>
           <div class="fb-grp">
@@ -1827,7 +1831,7 @@
 <!-- ═══════════════════════════════════════════════
      MAIN APPLICATION SCRIPT
      ═══════════════════════════════════════════════ -->
-<script src="./assets/js/app.js?v=20261108-prod-supabase-2119" defer></script>
+<script src="./assets/js/app.js?v=20261108-prod-feedback-rating" defer></script>
 <!-- ── AUTH OVERLAY ── -->
 <div class="auth-overlay hidden" id="authOverlay">
   <div class="auth-card" id="authCard">

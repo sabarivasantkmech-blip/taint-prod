@@ -137,8 +137,10 @@ html.light .topbar{background:rgba(255,255,255,.92);}
   white-space:nowrap;cursor:default;letter-spacing:.02em;
 }
 .lang-chip .lang-flag{
-  font-family:'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',sans-serif;
-  font-size:1.2em;line-height:1;flex:0 0 auto;
+  display:flex;align-items:center;flex:0 0 auto;
+}
+.lang-flag-image{
+  display:block;width:22px;height:15px;object-fit:cover;border-radius:2px;
 }
 .theme-btn{
   margin-left:auto;background:var(--s2);border:1px solid var(--bd2);
@@ -876,8 +878,13 @@ html.light .welcome-time-card{background:rgba(255,255,255,.74);}
   .card-title{flex-wrap:wrap;}
 }
 .star-row{display:flex;gap:6px;margin-bottom:10px;}
-.star{font-size:24px;color:var(--bd2);cursor:pointer;transition:color .15s;}
-.star.lit{color:#fbbf24;}
+.star-row .star,.stars .star{
+  appearance:none;display:grid;place-items:center;width:38px;height:38px;padding:0;
+  border:0;border-radius:5px;background:transparent;color:var(--bd2);
+  font:inherit;font-size:24px;line-height:1;cursor:pointer;transition:color .15s,transform .15s;
+}
+.star-row .star.on,.stars .star.on{color:#fbbf24;transform:scale(1.1);}
+.star-row .star:focus-visible,.stars .star:focus-visible{outline:2px solid var(--green);outline-offset:2px;}
 .fb-textarea{width:100%;min-height:80px;background:var(--s2);border:1px solid var(--bd2);border-radius:8px;padding:10px;font-size:13px;color:var(--tx);font-family:"DM Sans",sans-serif;resize:vertical;outline:none;box-sizing:border-box;}
 .fb-textarea:focus{border-color:var(--green);}
 
@@ -1754,8 +1761,6 @@ details summary:hover{color:var(--tx);}
 .fb-grp label{font-size:11px;font-weight:500;color:var(--mu);text-transform:uppercase;letter-spacing:.06em;}
 textarea{resize:vertical;min-height:88px;line-height:1.55;}
 .stars{display:flex;gap:5px;}
-.star{font-size:22px;cursor:pointer;transition:transform .15s;filter:grayscale(1)opacity(.35);}
-.star:hover,.star.on{filter:none;transform:scale(1.15);}
 .fb-submit{
   background:var(--green);color:#031a0f;font-family:'Syne',sans-serif;
   font-size:13px;font-weight:700;padding:11px 24px;border:none;
@@ -2080,7 +2085,7 @@ body { -webkit-text-size-adjust: 100%; }
 /* ── Touch friendliness ── */
 @media (pointer: coarse) {
   select, input, .cat-btn, .fp, .hp-btn, .gen-btn,
-  .fb-submit, .theme-btn, .reset-btn, .refresh-btn,
+  .fb-submit, .theme-btn, .reset-btn, .refresh-btn, .star-row .star, .stars .star,
   .key-toggle-row, .swap-btn {
     min-height: 44px;
   }
