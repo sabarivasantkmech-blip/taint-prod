@@ -37,7 +37,7 @@
 ╚══════════════════════════════════════════════════════════════════════════════╝
 -->
 <meta charset="UTF-8"/>
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://nominatim.openstreetmap.org https://router.project-osrm.org https://api.waqi.info https://api.open-meteo.com https://*.supabase.co https://formsubmit.co https://server.arcgisonline.com; form-action 'self' https://formsubmit.co; frame-src 'self' blob: data:; worker-src 'none'; object-src 'none'; base-uri 'self';">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://nominatim.openstreetmap.org https://router.project-osrm.org https://api.waqi.info https://api.open-meteo.com https://*.supabase.co https://formsubmit.co https://server.arcgisonline.com; form-action 'self' https://formsubmit.co; frame-src 'self' blob: data:; worker-src 'none'; object-src 'none'; base-uri 'self';">
 
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
 <title>TAINT — Carbon Emissions Calculator</title>
@@ -50,7 +50,7 @@
 <script src="./assets/js/leaflet-popup-sanitize.js?v=20260527" defer></script>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700&family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet"/>
 <!-- Supabase used for Auth and persistence. -->
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.106.1/dist/umd/supabase.min.js" integrity="sha384-dzQgxMPp/h+N0t5qDf6Bp516wKZr3pXgGMpA7/ZM6tiWkqYo90N060L03dxnZ8Tf" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.min.js" integrity="sha384-gnyZit14c5lnGcarmA166QQjjJXpucw25ogZXuwH3HxxY904zHkBqmxVpelsPorb" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
 
 <link rel="stylesheet" href="./assets/css/app.css?v=20261108-prod-mobile-chip"/>
 
@@ -1827,7 +1827,7 @@
 <!-- ═══════════════════════════════════════════════
      MAIN APPLICATION SCRIPT
      ═══════════════════════════════════════════════ -->
-<script src="./assets/js/app.js?v=20261108-prod-guest-mode" defer></script>
+<script src="./assets/js/app.js?v=20261108-prod-supabase-2119" defer></script>
 <!-- ── AUTH OVERLAY ── -->
 <div class="auth-overlay hidden" id="authOverlay">
   <div class="auth-card" id="authCard">

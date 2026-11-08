@@ -3900,7 +3900,6 @@ const SC = {
     'gmailmcp.googleapis.com' : 1000,
     'fonts.googleapis.com'    : 1200,
     'fonts.gstatic.com'       : 28000,
-    'cdnjs.cloudflare.com'    : 65000,  // Leaflet ~65 KB minified
   },
 
   sizeOf(url){
