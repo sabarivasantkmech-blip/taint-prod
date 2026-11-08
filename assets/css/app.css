@@ -136,6 +136,10 @@ html.light .topbar{background:rgba(255,255,255,.92);}
   background:var(--s2);border:1px solid var(--bd2);color:var(--mu);
   white-space:nowrap;cursor:default;letter-spacing:.02em;
 }
+.lang-chip .lang-flag{
+  font-family:'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',sans-serif;
+  font-size:1.2em;line-height:1;flex:0 0 auto;
+}
 .theme-btn{
   margin-left:auto;background:var(--s2);border:1px solid var(--bd2);
   border-radius:999px;padding:5px 12px;font-size:12px;font-weight:500;
@@ -1963,6 +1967,7 @@ body { -webkit-text-size-adjust: 100%; }
 .clock-pill    { font-size: 10px; padding: 3px 8px; gap: 4px; }
 .clock-pill strong { font-size: 11px; }
 .aqi-chip, .temp-chip, .lang-chip { font-size: 10.5px; padding: 3px 8px; }
+.lang-chip { gap: 7px; }
 .theme-btn     { padding: 4px 10px; font-size: 11px; }
 
 /* Wrap gets tighter horizontal padding */
