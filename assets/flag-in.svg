@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 16" role="img" aria-label="India flag">
+  <rect width="24" height="16" fill="#fff"/>
+  <path fill="#ff9933" d="M0 0h24v5.333H0z"/>
+  <path fill="#138808" d="M0 10.667h24V16H0z"/>
+  <circle cx="12" cy="8" r="2.35" fill="none" stroke="#000080" stroke-width=".5"/>
+  <circle cx="12" cy="8" r=".34" fill="#000080"/>
+  <g stroke="#000080" stroke-width=".18">
+    <path d="M12 5.65v4.7M9.65 8h4.7M10.34 6.34l3.32 3.32m0-3.32-3.32 3.32"/>
+    <path d="M11.4 5.7 12.6 10.3M9.7 7.4 14.3 8.6m-4.6 0 4.6-1.2m-3.3 2.9 1.2-4.6"/>
+  </g>
+</svg>

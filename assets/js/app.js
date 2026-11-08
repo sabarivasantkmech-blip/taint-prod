@@ -29,9 +29,6 @@ let currentCat   = 'two';    // two | four | shared | transit
 let currentFuel  = 'petrol'; // petrol | diesel | cng | electric | hybrid | rail
 let currentHtype = 'mild';   // mild | strong | phev (hybrid only)
 
-/* Feedback star rating */
-let starRating = 0;
-
 /* Cost render memoisation */
 let lastVeh = null, lastFuel = null;
 
@@ -1667,6 +1664,7 @@ async function sbPost(table, payload, kind='functional') {
         ...payload
       })
     }, { label:`${table} insert`, timeout:9000, retries:1 });
+    if (prefer === 'return=minimal') return { inserted:true };
     const data = await res.json().catch(() => []);
     return Array.isArray(data) ? data[0] : data;
   });
@@ -3061,6 +3059,69 @@ document.getElementById('passengers').addEventListener('input',scheduleCalc);
 // ──────────────────────────────────────────────────────
 const FB_KEY='taint_feedback_v1';
 
+function createStarRatingPicker(rowId) {
+  const row = document.getElementById(rowId);
+  const stars = [...row.querySelectorAll('.star')];
+  let selected = 0;
+  let preview = 0;
+
+  const render = () => stars.forEach((star, index) => {
+    const value = index + 1;
+    star.classList.toggle('on', value <= (preview || selected));
+    star.setAttribute('aria-checked', String(value === selected));
+    star.tabIndex = value === (selected || 1) ? 0 : -1;
+  });
+
+  const choose = value => {
+    selected = Math.max(1, Math.min(5, Number(value)));
+    preview = 0;
+    render();
+  };
+
+  row.addEventListener('pointerover', event => {
+    if (event.pointerType === 'touch') return;
+    const star = event.target.closest('.star');
+    if (!star) return;
+    preview = Number(star.dataset.v);
+    render();
+  });
+  row.addEventListener('pointerleave', () => { preview = 0; render(); });
+  row.addEventListener('focusin', event => {
+    const star = event.target.closest('.star');
+    if (!star) return;
+    preview = Number(star.dataset.v);
+    render();
+  });
+  row.addEventListener('focusout', event => {
+    if (!row.contains(event.relatedTarget)) { preview = 0; render(); }
+  });
+  row.addEventListener('click', event => {
+    const star = event.target.closest('.star');
+    if (star) choose(star.dataset.v);
+  });
+  row.addEventListener('keydown', event => {
+    const star = event.target.closest('.star');
+    if (!star) return;
+    const current = Number(star.dataset.v);
+    let next = current;
+    if (event.key === 'ArrowRight' || event.key === 'ArrowDown') next = current === 5 ? 1 : current + 1;
+    else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') next = current === 1 ? 5 : current - 1;
+    else if (event.key === 'Home') next = 1;
+    else if (event.key === 'End') next = 5;
+    else return;
+    event.preventDefault();
+    choose(next);
+    stars[next - 1].focus();
+  });
+
+  return {
+    get value() { return selected; },
+    reset() { selected = 0; preview = 0; render(); }
+  };
+}
+
+const feedbackRatingPicker = createStarRatingPicker('starRow');
+
 function renderFeedback() {
   const items=JSON.parse(localStorage.getItem(FB_KEY)||'[]');
   const list=document.getElementById('fbList');
@@ -3079,21 +3140,6 @@ function renderFeedback() {
     </div>`;
   }).join('');
 }
-
-/* Star hover + click */
-document.getElementById('starRow').addEventListener('mouseover',e=>{
-  const s=e.target.closest('.star'); if(!s) return;
-  const v=+s.dataset.v;
-  document.querySelectorAll('.star').forEach((st,i)=>st.classList.toggle('on',i<v));
-});
-document.getElementById('starRow').addEventListener('mouseleave',()=>{
-  document.querySelectorAll('.star').forEach((s,i)=>s.classList.toggle('on',i<starRating));
-});
-document.getElementById('starRow').addEventListener('click',e=>{
-  const s=e.target.closest('.star'); if(!s) return;
-  starRating=+s.dataset.v;
-  document.querySelectorAll('.star').forEach((st,i)=>st.classList.toggle('on',i<starRating));
-});
 
 document.getElementById('fbForm').addEventListener('submit', async e => {
   e.preventDefault();
@@ -3124,17 +3170,19 @@ document.getElementById('fbForm').addEventListener('submit', async e => {
     name  : document.getElementById('fbName').value.trim()  || 'Anonymous',
     email,
     type  : document.getElementById('fbType').value,
-    stars : starRating, msg,
+    stars : feedbackRatingPicker.value, msg,
     city  : city().name,
     date  : `${now.getDate()} ${MONTHS[now.getMonth()]} ${now.getFullYear()}`
   };
 
   /* ── 1. Save to localStorage (always works) ── */
+  let localSaved = false;
   try {
     const items = JSON.parse(localStorage.getItem(FB_KEY) || '[]');
     items.push(entry);
     if (items.length > 20) items.splice(0, items.length - 20);
     localStorage.setItem(FB_KEY, JSON.stringify(items));
+    localSaved = true;
   } catch {}
 
   /* ── 2. Send via FormSubmit AJAX endpoint ──────────────────────────
@@ -3151,7 +3199,10 @@ document.getElementById('fbForm').addEventListener('submit', async e => {
     const payload = {
       name     : entry.name,
       email    : entry.email || 'noreply@taint.app',
-      message  : `[${entry.type}] ★${entry.stars}/5 | City: ${entry.city}\n\n${entry.msg}`,
+      feedback_type: entry.type,
+      rating   : entry.stars ? `${entry.stars}/5` : 'Not rated',
+      city     : entry.city,
+      message  : `[${entry.type}] Rating: ${entry.stars ? `${entry.stars}/5` : 'Not rated'} | City: ${entry.city}\n\n${entry.msg}`,
       _subject : `TAINT Feedback (${entry.type}) from ${entry.name} — ${entry.city}`,
       _captcha : 'false',
       _template: 'table'
@@ -3172,7 +3223,7 @@ document.getElementById('fbForm').addEventListener('submit', async e => {
     console.warn('TAINT feedback email failed:', fetchErr);
   }
 
-  await sbPost('feedback_messages', {
+  const dbResult = await sbPost('feedback_messages', {
     source       : 'contact',
     name         : entry.name,
     email        : entry.email || null,
@@ -3184,18 +3235,32 @@ document.getElementById('fbForm').addEventListener('submit', async e => {
     email_sent   : emailSent,
     email_error  : emailError || null
   }, 'functional');
+  const databaseSaved = dbResult !== null;
 
   /* ── 3. Show result to user ── */
-  if (emailSent) {
+  if (emailSent && databaseSaved) {
     document.getElementById('fbForm').style.display = 'none';
     document.getElementById('fbOk').textContent     = '✅ Thank you! Your feedback has been saved and emailed.';
     document.getElementById('fbOk').classList.add('show');
     notify('Feedback saved and emailed.', 'success', 'Thanks');
+  } else if (emailSent) {
+    document.getElementById('fbForm').style.display = 'none';
+    document.getElementById('fbOk').textContent = localSaved
+      ? '✅ Feedback emailed. The cloud copy could not be saved; it remains on this device.'
+      : '✅ Feedback emailed, but local and cloud copies could not be saved.';
+    document.getElementById('fbOk').classList.add('show');
+    notify('Feedback emailed; cloud save needs attention.', 'warn', 'Sent');
+  } else if (databaseSaved) {
+    document.getElementById('fbForm').style.display = 'none';
+    document.getElementById('fbOk').textContent =
+      `💾 Feedback saved ${localSaved ? 'on this device and in the cloud' : 'in the cloud'}. Email delivery failed${emailError ? ': '+emailError.slice(0,60) : ''}. Check ${FEEDBACK_EMAIL} for a FormSubmit activation link if this is your first submission.`;
+    document.getElementById('fbOk').classList.add('show');
+    document.getElementById('fbOk').style.color = 'var(--amber)';
+    notify('Feedback saved; email delivery needs attention.', 'warn', 'Saved');
   } else {
-    /* Saved locally but email failed — still positive but honest */
     document.getElementById('fbForm').style.display = 'none';
     document.getElementById('fbOk').textContent     =
-      `💾 Feedback saved on this device. Email delivery failed${emailError ? ': '+emailError.slice(0,60) : ''}.
+      `${localSaved ? '💾 Feedback saved on this device.' : '❌ Local save failed.'} Email delivery failed${emailError ? ': '+emailError.slice(0,60) : ''}.
       (If this is your first submission, check ${FEEDBACK_EMAIL} for a FormSubmit activation link.)`;
     document.getElementById('fbOk').classList.add('show');
     document.getElementById('fbOk').style.color = 'var(--amber)';
@@ -3210,8 +3275,7 @@ document.getElementById('fbForm').addEventListener('submit', async e => {
     document.getElementById('fbForm').style.display   = 'flex';
     document.getElementById('fbOk').classList.remove('show');
     document.getElementById('fbOk').style.color       = '';
-    starRating = 0;
-    document.querySelectorAll('.star').forEach(s => s.classList.remove('on'));
+    feedbackRatingPicker.reset();
     btn.disabled = false; btn.textContent = 'Send Feedback →';
   }, 6000);
 });
@@ -6781,61 +6845,77 @@ document.getElementById('mtCalcBtn')?.addEventListener('click', mtCalculateProfi
 document.getElementById('mtCity')?.addEventListener('change', e => setCity(e.target.value));
 
 /* ── Star rating ── */
-let mtStarVal = 0;
-document.querySelectorAll('#mtStarRow .star').forEach(star => {
-  star.addEventListener('click', () => {
-    mtStarVal = +star.dataset.v;
-    document.querySelectorAll('#mtStarRow .star').forEach(s =>
-      s.classList.toggle('lit', +s.dataset.v <= mtStarVal));
-  });
-  star.addEventListener('mouseenter', () => {
-    document.querySelectorAll('#mtStarRow .star').forEach(s =>
-      s.classList.toggle('lit', +s.dataset.v <= +star.dataset.v));
-  });
-  star.addEventListener('mouseleave', () => {
-    document.querySelectorAll('#mtStarRow .star').forEach(s =>
-      s.classList.toggle('lit', +s.dataset.v <= mtStarVal));
-  });
-});
+const mtRatingPicker = createStarRatingPicker('mtStarRow');
 
 document.getElementById('mtFeedbackSubmit').addEventListener('click', async () => {
   const text = document.getElementById('mtFeedbackText').value.trim();
-  if (!mtStarVal && !text) return;
+  const rating = mtRatingPicker.value;
+  if (!rating && !text) return;
 
   const btn = document.getElementById('mtFeedbackSubmit');
   btn.textContent = 'Sending…'; btn.disabled = true;
 
   const name  = document.getElementById('mtName').value || 'Anonymous';
-  const entry = { rating: mtStarVal, text, ts: new Date().toISOString(), city: city().name, source: 'My Taint' };
+  const entry = { rating, text, ts: new Date().toISOString(), city: city().name, source: 'My Taint' };
 
   /* Save locally */
-  try { localStorage.setItem('fb_mt_' + Date.now(), JSON.stringify(entry)); } catch {}
+  let localSaved = false;
+  try {
+    localStorage.setItem('fb_mt_' + Date.now(), JSON.stringify(entry));
+    localSaved = true;
+  } catch {}
 
   /* Send email via FormSubmit AJAX */
   let sent = false;
+  let emailError = '';
   try {
-    const res = await fetch(`https://formsubmit.co/ajax/${FEEDBACK_EMAIL}`, {
+    const res = await appFetch(`https://formsubmit.co/ajax/${FEEDBACK_EMAIL}`, {
       method : 'POST',
       headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
       body   : JSON.stringify({
         name     : name,
         email    : 'noreply@taint.app',
-        message  : `[My Taint Feedback] ★${mtStarVal}/5 | City: ${city().name}\n\n${text || '(no message)'}`,
-        _subject : `TAINT My Taint Feedback ★${mtStarVal} — ${name} (${city().name})`,
+        source   : 'My Taint',
+        rating   : rating ? `${rating}/5` : 'Not rated',
+        city     : city().name,
+        message  : `[My Taint Feedback] Rating: ${rating ? `${rating}/5` : 'Not rated'} | City: ${city().name}\n\n${text || '(no message)'}`,
+        _subject : `TAINT My Taint Feedback ${rating ? `${rating}/5` : ''} — ${name} (${city().name})`,
         _captcha : 'false',
         _template: 'table'
       })
-    });
+    }, { label:'My Taint feedback email', timeout:12000 });
     const data = await res.json();
     sent = data.success === 'true' || data.success === true;
-  } catch {}
+    if (!sent) emailError = data.message || 'FormSubmit returned failure';
+  } catch (error) {
+    emailError = error.message || 'Email request failed';
+    console.warn('TAINT My Taint feedback email failed:', emailError);
+  }
 
-  document.getElementById('mtFeedbackBody').innerHTML = `
-    <div style="text-align:center;padding:16px;font-size:14px;color:var(--green)">
-      ${sent
-        ? `✅ Thank you, ${name}! Feedback emailed successfully.`
-        : `💾 Feedback saved. Email delivery pending — check ${FEEDBACK_EMAIL} for a FormSubmit activation link if this is your first submission.`}
-    </div>`;
+  const dbResult = await sbPost('feedback_messages', {
+    source       : 'my_taint',
+    name,
+    email        : null,
+    feedback_type: 'general',
+    rating       : rating || null,
+    message      : text || null,
+    city_key     : currentCityKey,
+    city_name    : city().name,
+    email_sent   : sent,
+    email_error  : emailError || null
+  }, 'functional');
+  const databaseSaved = dbResult !== null;
+  const result = document.createElement('p');
+  result.setAttribute('role', 'status');
+  result.style.cssText = 'text-align:center;padding:16px;font-size:14px;color:var(--green)';
+  const score = rating ? `Your ${rating}/5 rating was recorded. ` : 'Your feedback was recorded. ';
+  if (sent && databaseSaved) result.textContent = `Thank you, ${name}. ${score}It was emailed to support.`;
+  else if (sent) result.textContent = localSaved
+    ? `Thank you, ${name}. Feedback emailed; cloud saving failed, but a local copy was kept.`
+    : `Thank you, ${name}. Feedback emailed, but local and cloud saving failed.`;
+  else if (databaseSaved) result.textContent = `${score}Email delivery failed${emailError ? `: ${emailError.slice(0, 80)}` : ''}. Check ${FEEDBACK_EMAIL} for an activation link if this is your first submission.`;
+  else result.textContent = `${localSaved ? 'Feedback kept on this device' : 'Local save failed'}, and cloud save and email delivery failed${emailError ? `: ${emailError.slice(0, 80)}` : ''}.`;
+  document.getElementById('mtFeedbackBody').replaceChildren(result);
 });
 
 /* ── Export full profile ── */
